@@ -13,7 +13,8 @@ What the out root holds:
   Also from the English build: the sprites' table sizes (+0x10). (Its UV table differs in 4 rows
   menupack.py does not use.)
   The titles: youTitle::TitleTableData's rows already hold the English at +0x18 beside +0x14's.
-- data/sprite: the English picture of each name, but for the ones in keep_japanese.
+- data/sprite: the English picture of each name, but for the ones in keep_japanese. A swap of pictures
+  misses what the English build's code draws differently: see english_hud, and storysel.py's STORYSEL_DAI.
 - data/anime: the English layouts with their sprite ids back in the Japanese table's numbering, where
   they have the same frames and records (menu.c knows the frames) and all their sprites have numbers.
 - data/cutin/jp: cutin/us's files, in UTF-8. data/movie: movie-us's, but for the opening. All else links
@@ -348,6 +349,16 @@ def patch_main(jroot, eroot, out):
     return d, j, a, names, english, unpaired
 
 
+def english_hud(ed, out):
+    """The race's own plate (hudpack.py): the English build's code takes HP/ from the atlas (UV table entry
+    76, the 28 x 16 of cons_p_bariki_bariki's 馬力/) and draws no 級 after the class."""
+    atlas = Image.open(f"{ed}/cons_p_01.png").convert("RGBA")
+    for name, picture in (("cons_p_bariki_bariki.png", atlas.crop((216, 76, 244, 92))),
+                          ("cons_p_rank_Q.png", Image.new("RGBA", (16, 16)))):
+        os.unlink(f"{out}/{name}")
+        picture.save(f"{out}/{name}")
+
+
 def blank(path):
     try:
         return Image.open(path).convert("RGBA").getchannel("A").getbbox() is None
@@ -379,6 +390,7 @@ def overlay_sprites(jd, ed, out):
             else:
                 src, used = e, used + 1
         os.symlink(os.path.abspath(src), os.path.join(out, f))
+    english_hud(ed, out)
     print(f"sprites: {used} English, {len(kept)} kept Japanese over the English build's")
     return kept
 
@@ -449,6 +461,7 @@ def check(out):
     assert e.string(e.u32(0x93FD340))[1] == "First half The return of the devil Z", "the chapter titles' table"
     assert e.string(e.u32(TITLES + 0x1C + 0x14))[1] == "Wangan Beginner", "the titles"
     assert e.string(e.u32(SPRITES + SPRITE_SIZE * 4))[1] == "data/sprite/3d.png", "the sprite table moved"
+    assert Image.open(f"{out}/data/sprite/cons_p_bariki_bariki.png").getbbox(), "HP/ in the atlas"
     cut = "".join(open(os.path.join(f"{out}/data/cutin/jp", f), encoding="utf-8").read()
                   for f in os.listdir(f"{out}/data/cutin/jp"))
     for x, y in CAR_FIXES[:6]:

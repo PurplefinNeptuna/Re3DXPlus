@@ -3869,7 +3869,7 @@ static void draw_pre(const menu_state *m, float fade) { draw_pre_as(m, fade, 0);
  * - menu_layout_st_rival: the five episodes' places (2x2 markers 0x1bb1..0x1bb5), a spin box
  *   again. On each place a menu_g_st_rival_<colour> (its 2 centres an even number of title
  *   glyphs), the chosen one large (open 1, cleared 101, locked 201), the others small (+70):
- *   the picture in 0x96d (grey 0x164a), "第 <loop * 100 + n + 1> 話" in the glyph templates
+ *   the picture in 0x96d (grey 0x164a), "第 <loop * 100 + n + 1> 話" (English: no 第) in the glyph templates
  *   0x1e18..0x1e1e (the 2s: 0x1e1f first). menu_layout_st_rival_arrow: k*100 (60 a loop),
  *   4 + k when episode k + 1 is locked.
  * - menu_layout_st_rival_ramp: the chapter's name (font 4, for 0x49), START RAMP (0x580) and
@@ -4755,7 +4755,7 @@ static void draw_st_rival(const menu_state *m, int clock, float fade, int bars) 
     int st = s.ep[lv][i], n = base + i, row = st_index(loop, n);
     char num[12];
     snprintf(num, sizeof num, "%d", loop * 100 + n + 1);
-    int len = (int)strlen(num), glyphs = len + 2, even = !(glyphs & 1);
+    int len = (int)strlen(num), glyphs = STORYSEL_DAI + len + 1, even = !(glyphs & 1);
     /* the glyph places left to right: 0..6, the 2s 7 first */
     int place[8], places = 0;
     if (even) place[places++] = T_EP_GLYPH7;
@@ -4768,9 +4768,9 @@ static void draw_st_rival(const menu_state *m, int clock, float fade, int bars) 
     sw[nsw++] = (anm_swap){ anm_sprite(T_EP_NAME), -1 };
     for (int k = 0; k < places; ++k) {
       int g = k - first, to = -1;
-      if (g == 0) to = S_GLYPH_DAI;
+      if (STORYSEL_DAI && g == 0) to = S_GLYPH_DAI;
       else if (g == glyphs - 1) to = S_GLYPH_WA;
-      else if (g > 0 && g < glyphs - 1) to = S_GLYPH_DIGIT + num[g - 1] - '0';
+      else if (g >= STORYSEL_DAI && g < glyphs - 1) to = S_GLYPH_DIGIT + num[g - STORYSEL_DAI] - '0';
       sw[nsw++] = (anm_swap){ anm_sprite(place[k]), to >= 0 ? anm_sprite(to) : -1 };
     }
     int frame = (st == 0 ? 200 : st == 1 ? 0 : 100) + (i == m->sel && m->from < 0 ? 1 : 71);

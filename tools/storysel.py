@@ -44,6 +44,9 @@ class Elf:
 
 
 elf = Elf(sys.argv[1])
+# an English root (tools/lang_en.py): clThread_5_2_EnemySelect::run draws the episode's number with no
+# 第 before it there, "1 Story"
+english = os.path.exists(os.path.join(os.path.dirname(os.path.abspath(sys.argv[1])), "lang.txt"))
 images = [(elf.u32(0x93FC920 + 16 * i), elf.u32(0x93FC924 + 16 * i)) for i in range(111)]
 levels = [elf.u32(0x93FD040 + 4 * i) for i in range(20)]
 titles = [elf.cstr(elf.u32(0x93FD340 + 4 * i)) for i in range(22)]
@@ -61,6 +64,7 @@ out += ["  { %s }," % ", ".join(str(v) for v in levels[4 * d:4 * d + 4]) for d i
 out += ["};", "static const int STORYSEL_TUNER[2] = { 0x4e7, 0x4e8 };", "",
         "/* pre-rendered texts (menupack.py): the chapter titles 0..21, START RAMP, the ramps */",
         "#define STORYSEL_TEXT 101200",
+        "#define STORYSEL_DAI %d /* the episode's number has 第 before it */" % (0 if english else 1),
         "#define STORYSEL_N_TITLES %d" % len(titles),
         "#define STORYSEL_START_RAMP (STORYSEL_TEXT + %d)" % len(titles),
         "#define STORYSEL_RAMP_TEXT (STORYSEL_TEXT + %d)" % (len(titles) + 1),
