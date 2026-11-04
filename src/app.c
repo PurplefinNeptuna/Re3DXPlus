@@ -912,9 +912,20 @@ static int options_load(void) {
       G.menu.key_dy[g] = lay[g * 3 + 2] < -2000 || lay[g * 3 + 2] > 2000 ? 0 : lay[g * 3 + 2];
     }
   /* the testers' story switch (menu.h story_test), a third line */
-  int test = 0, traffic = 0;
+  int test = 0, traffic = 0, pd[6], ps[2];
   if (n >= 3 && fscanf(f, " test %d", &test) == 1) G.menu.story_test = test >= 0 && test <= 10 ? test : 0;
   if (n >= 3 && fscanf(f, " traffic %d", &traffic) == 1) G.menu.ta_traffic = traffic != 0;
+  /* the CONTROLLER screen's (menu.c MENU_PAD) */
+  if (n >= 3 && fscanf(f, " pad %d %d %d %d %d %d", &pd[0], &pd[1], &pd[2], &pd[3], &pd[4], &pd[5]) == 6) {
+    for (int k = 0; k < 3; ++k) G.menu.pad_digital[k] = pd[k] != 0;
+    if (pd[3] >= 0 && pd[3] <= MENU_PAD_DEAD_MAX) G.menu.pad_stick_dead = pd[3];
+    if (pd[4] >= 0 && pd[4] <= MENU_PAD_DEAD_MAX) G.menu.pad_trigger_dead = pd[4];
+    if (pd[5] >= 0 && pd[5] <= MENU_PAD_RUMBLE_MAX) G.menu.pad_rumble = pd[5];
+  }
+  if (n >= 3 && fscanf(f, " shift %d %d", &ps[0], &ps[1]) == 2) {
+    G.menu.pad_shift = ps[0] != 0;
+    if (ps[1] >= MENU_PAD_SHIFT_DEAD_MIN && ps[1] <= MENU_PAD_SHIFT_DEAD_MAX) G.menu.pad_shift_dead = ps[1];
+  }
   fclose(f);
   if (n < 3) return 0;
   G.menu.hires = hires != 0;
@@ -931,14 +942,17 @@ static int options_load(void) {
 }
 
 static void options_save(void) {
-  static int last[25] = { -1 };
-  int now[25] = { G.menu.gyro, G.menu.gyro_sens, G.menu.over_on, G.menu.sharp_on, G.menu.pedal_slide, G.menu.ao_on,
+  static int last[33] = { -1 };
+  int now[33] = { G.menu.gyro, G.menu.gyro_sens, G.menu.over_on, G.menu.sharp_on, G.menu.pedal_slide, G.menu.ao_on,
                   G.menu.bm_on, G.menu.hd_tex, G.menu.bloom_on, G.menu.ssao_on, G.menu.wet_on, G.menu.paint_on,
                   G.menu.aa4, G.menu.hires };
   for (int g = 0; g < 3; ++g)
     now[14 + g * 3] = G.menu.key_k[g], now[15 + g * 3] = G.menu.key_dx[g], now[16 + g * 3] = G.menu.key_dy[g];
   now[23] = G.menu.story_test;
   now[24] = G.menu.ta_traffic;
+  for (int k = 0; k < 3; ++k) now[25 + k] = G.menu.pad_digital[k];
+  now[28] = G.menu.pad_stick_dead, now[29] = G.menu.pad_trigger_dead, now[30] = G.menu.pad_rumble;
+  now[31] = G.menu.pad_shift, now[32] = G.menu.pad_shift_dead;
   if (G.options_global && !memcmp(now, last, sizeof now)) return;
   char path[1100];
   snprintf(path, sizeof path, "%s/option", G.save_dir);
@@ -950,6 +964,8 @@ static void options_save(void) {
           now[22]);
   fprintf(f, "test %d\n", now[23]);
   fprintf(f, "traffic %d\n", now[24]);
+  fprintf(f, "pad %d %d %d %d %d %d\n", now[25], now[26], now[27], now[28], now[29], now[30]);
+  fprintf(f, "shift %d %d\n", now[31], now[32]);
   fclose(f);
   memcpy(last, now, sizeof last);
   G.options_global = 1;
@@ -972,7 +988,8 @@ static void garage_load(void) {
   if (!f) return;
   int a, b, legacy = 0, named = 0;
   while (fgets(line, sizeof line, f)) {
-    if (sscanf(line, "gearbox %d", &a) == 1) G.menu.manual = a != 0;
+    /* (a save from before the gearbox was the card's: every car as it was) */
+    if (sscanf(line, "gearbox %d", &a) == 1) memset(G.menu.manual_car, a != 0, sizeof G.menu.manual_car);
     name_read(line, G.menu.name);
     named |= strncmp(line, "name ", 5) == 0;
     int c2, d2 = 1;
@@ -1007,6 +1024,16 @@ static void garage_load(void) {
       int mk, c;
       if (car_by_label(label, &mk, &c) && a >= 0 && a < 3 && b >= 0 && b < 3)
         G.menu.meter_car[mk][c] = (signed char)a, G.menu.sound_car[mk][c] = (signed char)b;
+      continue;
+    }
+    if (sscanf(line, "cvol %d %199[^\n]", &a, label) == 2) {
+      int mk, c;
+      if (car_by_label(label, &mk, &c) && a >= 0 && a <= 3) G.menu.quiet_car[mk][c] = (signed char)a;
+      continue;
+    }
+    if (sscanf(line, "cgear %d %199[^\n]", &a, label) == 2) {
+      int mk, c;
+      if (car_by_label(label, &mk, &c)) G.menu.manual_car[mk][c] = a != 0;
       continue;
     }
     if (sscanf(line, "cbonus %d %199[^\n]", &a, label) == 2) {
@@ -1121,7 +1148,6 @@ static void garage_save(void) {
   snprintf(path, sizeof path, "%s/garage%d", G.save_dir, G.menu.save_slot);
   FILE *f = fopen(path, "w");
   if (!f) return;
-  fprintf(f, "gearbox %d\n", G.menu.manual);
   fprintf(f, "option %d %d %d %d\n", G.menu.gyro, G.menu.gyro_sens, G.menu.over_on, G.menu.sharp_on);
   /* the player's name (namedb.h's characters, -1 past its end) */
   fprintf(f, "name %d %d %d %d %d\n", G.menu.name[0], G.menu.name[1], G.menu.name[2], G.menu.name[3], G.menu.name[4]);
@@ -1140,6 +1166,8 @@ static void garage_save(void) {
     fprintf(f, "cbonus %d %s\n", G.menu.st_bonus_car[o->maker][o->car], label);
     /* the card check's meter (+0x26c) and BGM sound source */
     fprintf(f, "ccheck %d %d %s\n", G.menu.meter_car[o->maker][o->car], G.menu.sound_car[o->maker][o->car], label);
+    fprintf(f, "cvol %d %s\n", G.menu.quiet_car[o->maker][o->car], label);
+    fprintf(f, "cgear %d %s\n", G.menu.manual_car[o->maker][o->car], label);
     fprintf(f, "ctitle %d %d %d %s\n", G.menu.title_car[o->maker][o->car], G.menu.st_streak_car[o->maker][o->car],
             G.menu.vs_wins_car[o->maker][o->car], label);
     for (int c = 0; c < 10; ++c) {
@@ -1472,6 +1500,176 @@ void app_touch(void *id, int phase, float x, float y) {
     hud_touch(&G.hud, id, phase, x, y); /* (over the result, letting go of the pedals) */
 }
 
+/* ---- the controller: the race's wheel and pedals through hud_pad; the menus' left/right keys,
+ * back and decide directly, and a cursor whose A is a touch for what has no one item chosen ---- */
+#define PAD_DIGITAL_AT 0.5f /* a digital steering or pedal: full past half way */
+#define PAD_CURSOR_SPEED 900.0f /* layout px a second at full tilt */
+#define PAD_REPEAT_FIRST 0.35f
+#define PAD_REPEAT 0.15f
+#define PAD_TOUCH ((void *)-1) /* (no finger's id) */
+#define PAD_GEAR_HOLD 0.04f /* s on a gear before it counts: rolling the stick past one takes none */
+
+static struct {
+  int on, held, dir, screen, shown, touching;
+  float x, y, repeat;
+  int rumble_ms, rumble_cool; /* the pulse due; race ticks till a scrape's next */
+  int gear_at, gear_sent; /* the gear the right stick is on, and has asked */
+  float gear_t;
+  float rumble;
+} pad = { .screen = -1 };
+
+static float pad_dead(float v, float dead) {
+  float a = fabsf(v);
+  a = a <= dead ? 0.0f : a >= 1.0f ? 1.0f : (a - dead) / (1.0f - dead);
+  return v < 0 ? -a : a;
+}
+
+static void pad_menu(float dt, int down, int step, float lx, float ly, float rx, float ry) {
+  menu_state *m = &G.menu;
+  int free_screen = menu_pad_free(m);
+  float dead = (float)m->pad_stick_dead * 0.01f;
+  if (m->screen != pad.screen) {
+    pad.screen = m->screen;
+    pad.shown = free_screen;
+    pad.x = 512.0f, pad.y = 384.0f;
+  }
+  float mx = pad_dead(rx, dead) + (free_screen ? pad_dead(lx, dead) : 0.0f);
+  float my = pad_dead(ry, dead) + (free_screen ? pad_dead(ly, dead) : 0.0f);
+  if (mx != 0.0f || my != 0.0f) {
+    pad.shown = 1;
+    /* (squared: a slight tilt finds a small button, a full one crosses the screen) */
+    pad.x += mx * fabsf(mx) * PAD_CURSOR_SPEED * dt;
+    pad.y += my * fabsf(my) * PAD_CURSOR_SPEED * dt;
+    pad.x = fmaxf(-G.edge, fminf(1024.0f + G.edge, pad.x));
+    pad.y = fmaxf(0.0f, fminf(768.0f, pad.y));
+    if (pad.touching) app_touch(PAD_TOUCH, TOUCH_MOVED, pad.x, pad.y);
+  }
+  if (step) {
+    m->key = step;
+    if (!free_screen) pad.shown = 0;
+  }
+  if (down & (PAD_A | PAD_START)) {
+    if (pad.shown) {
+      pad.touching = 1;
+      app_touch(PAD_TOUCH, TOUCH_BEGAN, pad.x, pad.y);
+    } else {
+      menu_pad_ok(m);
+    }
+  }
+  if (down & PAD_B) menu_pad_back(m);
+  if (down & PAD_Y) menu_pad_key(m, HUD_MENU_OPTION);
+  if (down & PAD_X) menu_pad_key(m, HUD_MENU_HIDDEN);
+}
+
+void app_pad(float dt, int on, int buttons, float lx, float ly, float rx, float ry, float lt, float rt) {
+  G.menu.pad_motors = on == 2;
+  G.menu.pad_on = on = on != 0;
+  if (on != pad.on) {
+    /* the fingers on the keys let go, the keys going (they would never see their lift) */
+    if (on) hud_init(&G.hud, G.hud.screen_w, G.hud.screen_h);
+    fprintf(stderr, "controller %s\n", on ? "connected" : "gone");
+  }
+  pad.on = on;
+  int down = buttons & ~pad.held;
+  pad.held = buttons;
+  /* the cursor's A let go; before anything else, whichever screen it is by now */
+  if (pad.touching && !(buttons & (PAD_A | PAD_START))) {
+    pad.touching = 0;
+    app_touch(PAD_TOUCH, TOUCH_ENDED, pad.x, pad.y);
+  }
+  int dpad = (buttons & PAD_RIGHT ? 1 : 0) - (buttons & PAD_LEFT ? 1 : 0);
+  const menu_state *ms = &G.menu;
+  float trigger_dead = (float)ms->pad_trigger_dead * 0.01f;
+  float steer = ms->pad_digital[MENU_PAD_STEER] ? (lx < -PAD_DIGITAL_AT ? -1.0f : lx > PAD_DIGITAL_AT ? 1.0f : 0.0f)
+                                                : pad_dead(lx, (float)ms->pad_stick_dead * 0.01f);
+  float gas = ms->pad_digital[MENU_PAD_THROTTLE] ? (rt > PAD_DIGITAL_AT ? 1.0f : 0.0f) : pad_dead(rt, trigger_dead);
+  float brake = ms->pad_digital[MENU_PAD_BRAKE] ? (lt > PAD_DIGITAL_AT ? 1.0f : 0.0f) : pad_dead(lt, trigger_dead);
+  /* (digital steering, and the d-pad: as the touch keys, car_update ramping it) */
+  hud_pad(on, dpad ? (float)dpad : steer, !dpad && !ms->pad_digital[MENU_PAD_STEER], buttons & PAD_RT ? 1.0f : gas,
+          buttons & PAD_LT ? 1.0f : brake);
+  if (!on) {
+    pad.shown = 0, pad.screen = -1;
+    return;
+  }
+  /* left and right a step, on repeat while held; the stick too where it is not the cursor */
+  int dir = dpad, step = 0;
+  if (!dir && !menu_pad_free(&G.menu)) dir = lx < -0.5f ? -1 : lx > 0.5f ? 1 : 0;
+  if (dir != pad.dir) {
+    step = pad.dir = dir;
+    pad.repeat = PAD_REPEAT_FIRST;
+  } else if (dir && (pad.repeat -= dt) <= 0.0f) {
+    step = dir;
+    pad.repeat = PAD_REPEAT;
+  }
+
+  if (!G.in_menu && G.menu.ending == 2) {
+    if (down & (PAD_A | PAD_START)) app_touch(PAD_TOUCH, TOUCH_BEGAN, 0, 0); /* skips to its logo */
+  } else if (G.paused) {
+    if (down & PAD_A) menu_pad_pause(&G.menu, MENU_PAD_OK);
+    else if (down & (PAD_B | PAD_START)) menu_pad_pause(&G.menu, MENU_PAD_RESUME);
+    else if (step) menu_pad_pause(&G.menu, MENU_PAD_MOVE);
+  } else if (G.in_menu) {
+    pad_menu(dt, down, step, lx, ly, rx, ry);
+  } else if (G.menu.finish) {
+    if (down & (PAD_A | PAD_START)) app_touch(PAD_TOUCH, TOUCH_BEGAN, 0, 0); /* leaves the result */
+  } else {
+    if (down & PAD_START) G.hud.pause_pressed++;
+    if (!hud_pause_only()) {
+      if (down & PAD_A) G.hud.shift_up++;
+      if (down & PAD_X) G.hud.shift_down++;
+      if (down & PAD_Y) G.hud.camera_pressed++;
+      if (down & PAD_LB) G.hud.trans_pressed++;
+      if (down & PAD_SELECT) G.hud.reset_pressed++;
+      /* the right stick's lever: a gear past its dead zone, kept when let go (never neutral) */
+      int g = ms->pad_shift ? hud_gear_at(rx, ry, (float)ms->pad_shift_dead * 0.01f, car_gears()) : 0;
+      if (g != pad.gear_at) pad.gear_at = g, pad.gear_t = 0.0f;
+      if (!g) pad.gear_sent = 0;
+      else if (g != pad.gear_sent && (pad.gear_t += dt) >= PAD_GEAR_HOLD) hud_pad_gear(pad.gear_sent = g);
+    }
+  }
+}
+
+/* a race tick, before snd_update takes impact: the hits' pulses, by the level of their sounds
+ * (sound.c: a crash from impact 6; the wall's loop while wall_hit lasts) */
+static void pad_rumble_tick(const car_state *c) {
+  if (!pad.on || !G.menu.pad_rumble || !G.menu.pad_motors) return;
+  if (pad.rumble_cool > 0) pad.rumble_cool--;
+  if (c->impact > 6.0f) {
+    pad.rumble_ms = c->impact > 20.0f ? 250 : 120;
+    pad.rumble = fminf(1.0f, 0.4f + c->impact / 40.0f);
+    pad.rumble_cool = 15; /* (a crash is not cut short by its scrape) */
+  } else if (c->wall_hit > 0.0f && car_kmh(c) > 10.0f && !pad.rumble_cool) {
+    pad.rumble_ms = 120;
+    pad.rumble = 0.25f;
+    pad.rumble_cool = 6;
+  }
+}
+
+int app_rumble(float *strength) {
+  if (G.menu.pad_test) {
+    G.menu.pad_test = 0;
+    pad.rumble_ms = 200;
+    pad.rumble = 0.7f;
+  }
+  int ms = pad.rumble_ms;
+  pad.rumble_ms = 0;
+  if (!ms || !G.menu.pad_motors || !G.menu.pad_rumble) return 0;
+  *strength = pad.rumble * (float)G.menu.pad_rumble / MENU_PAD_RUMBLE_MAX;
+  return ms;
+}
+
+/* over the menus, where A would touch */
+static void pad_cursor_draw(void) {
+  if (!pad.on || !pad.shown || pad.screen != G.menu.screen) return;
+  float x = pad.x, y = pad.y;
+  hud_ui_begin(G.hud.screen_w, G.hud.screen_h);
+  hud_ui_rect(x - 19, y - 3, 38, 6, 0, 0, 0, 0.8f);
+  hud_ui_rect(x - 3, y - 19, 6, 38, 0, 0, 0, 0.8f);
+  hud_ui_rect(x - 17, y - 1.5f, 34, 3, 1.0f, 0.42f, 0.05f, 1);
+  hud_ui_rect(x - 1.5f, y - 17, 3, 34, 1.0f, 0.42f, 0.05f, 1);
+  hud_ui_end();
+}
+
 void app_tilt(float radians) { G.tilt = radians; }
 int app_wants_tilt(void) { return G.menu.gyro == HUD_STEER_GYRO; }
 
@@ -1502,7 +1700,9 @@ void app_movie_done(void) {
 
 /* the race's song stops with the last 10-in-a-row rival (clAudio::stopStream); result2 still
  * plays the result's (0x6d) */
-float app_bgm_level(void) { return G.in_menu ? 1.0f : menu_bgm_level(&G.menu); }
+float app_bgm_level(void) {
+  return menu_bgm_volume(&G.menu) * (G.in_menu ? 1.0f : menu_bgm_level(&G.menu));
+}
 
 const char *app_bgm(void) {
   return !G.in_menu && G.ten_bgm_off && !G.menu.finish ? NULL : menu_bgm(&G.menu, !G.in_menu);
@@ -2668,7 +2868,7 @@ static void movie_open(int select, int race, const int *rows, int n_rows) {
   fprintf(stderr, "story movie %d (select %d race %d): %.0f frames\n", mv->movie, select, race, len);
   if (len <= 1.0f) { /* its trails missing: the race at once */
     car_set_rivals(G.race_rv, G.race_nrv);
-    car_start(&G.car, G.race_course, G.menu.manual, &G.race_spec);
+    car_start(&G.car, G.race_course, MENU_MANUAL(&G.menu), &G.race_spec);
     story_cut_start();
     effects_reset();
     return;
@@ -2707,7 +2907,7 @@ static void movie_close(void) {
   hud_demo_end();
   G.movie_len = 0;
   car_set_rivals(G.race_rv, G.race_nrv);
-  if (car_start(&G.car, G.race_course, G.menu.manual, &G.race_spec) != 0) fprintf(stderr, "race after the movie failed to start\n");
+  if (car_start(&G.car, G.race_course, MENU_MANUAL(&G.menu), &G.race_spec) != 0) fprintf(stderr, "race after the movie failed to start\n");
   story_cut_start();
   effects_reset();
   G.movie_in = G.movie_fade ? MOVIE_FADE : 0;
@@ -3608,7 +3808,7 @@ static void menu_frame(float dt, double frame_start) {
      * Daikoku and met a junction its route never reaches (5.3 km to go: stuck; Allan 10-31) */
     if (!ten && !vs && G.menu.game == MENU_GAME_STORY) car_story_end(G.story_race == 0);
     car_set_rivals(rv, ten || vs ? 0 : G.n_rival);
-    if (car_start(&G.car, course, G.menu.manual, &spec) != 0) {
+    if (car_start(&G.car, course, MENU_MANUAL(&G.menu), &spec) != 0) {
       fprintf(stderr, "course %d failed to start\n", G.menu.course);
       if (vs) menu_vs_loading(&G.menu), G.menu.vs.state = MENU_VS_LOBBY;
       else menu_open(&G.menu);
@@ -3619,7 +3819,7 @@ static void menu_frame(float dt, double frame_start) {
       if (vs) G.menu.vs.state = MENU_VS_RACE;
       fprintf(stderr, "race: course %d (%s), %s colour %d, power %d handling %d, %s\n", G.menu.course,
               G.menu.official ? "official machine" : "personal best", CARDB_CARS[G.menu.maker][G.menu.car].label,
-              G.menu.color, power, handling, G.menu.manual ? "MT" : "AT");
+              G.menu.color, power, handling, MENU_MANUAL(&G.menu) ? "MT" : "AT");
       G.in_menu = 0;
       load_pause(); /* the race loads nothing more (its own first draws aside) */
       /* the car models stay for the car select after the race (unless iOS warned), only the
@@ -3747,6 +3947,7 @@ static void menu_frame(float dt, double frame_start) {
   if (G.menu.screen != MENU_COURSE && G.menu.screen != MENU_TEN_COURSE && G.menu.screen != MENU_VS_AREA) G.mini_shown = NULL;
   menu_draw(&G.menu, G.hud.screen_w, G.hud.screen_h, has3d ? menu_draw3d : NULL, &scene, mini_draw);
   if (G.edge > 0 && !menu_photo_bg() && !anm_wide_drawn()) wide_sides();
+  pad_cursor_draw();
   if (!G.loader) load_step(frame_start);
 }
 
@@ -4173,8 +4374,8 @@ void app_frame(float dt) {
   }
   if (G.hud.trans_pressed) {
     /* the arcade fixes the gearbox for a race; here it switches on the move */
-    G.menu.manual ^= 1;
-    car_set_manual(&G.car, G.menu.manual);
+    MENU_MANUAL(&G.menu) ^= 1;
+    car_set_manual(&G.car, MENU_MANUAL(&G.menu));
     garage_save();
     G.hud.trans_pressed = 0;
   }
@@ -4239,7 +4440,7 @@ void app_frame(float dt) {
   if (!G.paused && !frozen && !movie) {
     /* (once a tick as at 60 Hz, with all the time since) */
     G.snd_dt += dt;
-    if (steps) snd_update(&G.car, &in, G.snd_dt), G.snd_dt = 0;
+    if (steps) pad_rumble_tick(&G.car), snd_update(&G.car, &in, G.snd_dt), G.snd_dt = 0;
   }
   /* the time attack console's sounds: TIME EXTEND at a checkpoint, the last seconds' ticks */
   car_race *race = &G.car.race;

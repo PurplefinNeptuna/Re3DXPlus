@@ -54,6 +54,8 @@ void snd_ios_start(NSString *data_dir) {
   dir = [data_dir retain];
 }
 
+static float bgm_level = 1.0f; /* app_bgm_level's: a new track takes it too */
+
 void snd_ios_bgm(const char *name) {
   [bgm stop];
   [bgm release];
@@ -65,12 +67,15 @@ void snd_ios_bgm(const char *name) {
                                                  error:&err];
     if (!bgm) fprintf(stderr, "no BGM %s: %s\n", name, [[err description] UTF8String]);
     bgm.numberOfLoops = -1;
-    bgm.volume = 0.5f; /* BGM_VOLUME_TYPE_MIDDLE from audio.lua */
+    bgm.volume = 0.5f * bgm_level; /* BGM_VOLUME_TYPE_MIDDLE from audio.lua */
   }
   bgm_apply();
 }
 
-void snd_ios_bgm_level(float level) { bgm.volume = 0.5f * level; }
+void snd_ios_bgm_level(float level) {
+  bgm_level = level;
+  bgm.volume = 0.5f * level;
+}
 
 void snd_ios_pause(int p) {
   /* the lock screen and the home screen can take the audio session from the app (an

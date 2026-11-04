@@ -55,6 +55,24 @@ void hud_set_class(int cls);
 void hud_set_card(int title, const short *name);
 /* `id` identifies a finger (the UITouch pointer on iOS). */
 void hud_touch(hud_state *h, void *id, int phase, float x, float y);
+/* A game controller (app_pad): while on, the race's and the menus' arrow and back keys are not
+ * drawn, the race's touches ignored, the meters, plate, map and shift gate at the screen's foot,
+ * and hud_input takes these instead. analog: car_input.analog. */
+void hud_pad(int on, float steer, int analog, float throttle, float brake);
+/* the right stick's shift: the lever to this gear at the next hud_input (car_input.gear) */
+void hud_pad_gear(int gear);
+/* The gear the stick (x, y: + right, down) points at, 0 inside the dead zone (the radius). Up to 4
+ * gears: 1 top left, 2 bottom left, 3 top right, 4 bottom right. More: 1 top left, 2 bottom left,
+ * 3 up, 4 down, 5 top right, 6 bottom right, six sectors of 60 degrees (tan 30 = 0.577). */
+static inline int hud_gear_at(float x, float y, float dead, int gears) {
+  if (x * x + y * y < dead * dead) return 0;
+  int up = y < 0;
+  if (gears <= 4) return x < 0 ? (up ? 1 : 2) : (up ? 3 : 4);
+  if ((x < 0 ? -x : x) < 0.577f * (up ? -y : y)) return up ? 3 : 4;
+  return x < 0 ? (up ? 1 : 2) : (up ? 5 : 6);
+}
+/* the 10-in-a-row's entrances: only the pause key works now, a controller's too */
+int hud_pause_only(void);
 /* Fill the car input from the controls; edge-triggered buttons are consumed. */
 void hud_input(hud_state *h, car_input *in);
 

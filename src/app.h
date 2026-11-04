@@ -15,6 +15,15 @@ void app_wide(float edge, float key_k);
 void app_console(void);
 int app_init(const char *data_dir, int fb_width, int fb_height, float screen_w, float screen_h);
 void app_touch(void *id, int phase, float x, float y);
+/* A game controller, each frame before app_frame (the Android shell; iOS 6 has none): on 0 none,
+ * 1 one connected, 2 one with motors; one connected hides the on-screen keys. The PAD_* held, the sticks (-1..1, + right and
+ * down) and the triggers (0..1). */
+enum { PAD_A = 1, PAD_B = 2, PAD_X = 4, PAD_Y = 8, PAD_LB = 16, PAD_RB = 32, PAD_LT = 64, PAD_RT = 128,
+       PAD_START = 256, PAD_SELECT = 512, PAD_LEFT = 1024, PAD_RIGHT = 2048 };
+void app_pad(float dt, int on, int buttons, float lx, float ly, float rx, float ry, float lt, float rt);
+/* After app_frame: a pulse of the controller's motors due now, its ms (0 none) and strength 0..1
+ * (the race's hits, as loud as their sounds; the CONTROLLER screen's test). */
+int app_rumble(float *strength);
 /* The display's refresh in Hz, from any thread, as it changes (above 60 the race draws between
  * the arcade's 60 Hz frames); 60 until told. */
 void app_refresh(float hz);
@@ -33,7 +42,8 @@ void app_movie_done(void);
 /* The menu or race BGM that should play: a file name in data_dir/sound/bgm (without
  * .m4a), or NULL for none (the attract loop has its own sound). */
 const char *app_bgm(void);
-/* the BGM's level over its own (1; the story ending's fade out): main.m and main_android.c */
+/* the BGM's level over its own (the card's BGM volume, the story ending's fade out):
+ * main.m and main_android.c */
 float app_bgm_level(void);
 /* Loading on a thread of its own, so the menus keep their frames: after app_init main.m
  * runs app_loader on a new thread with a GL context sharing the app's current there; it

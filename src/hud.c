@@ -162,7 +162,12 @@ static int steer_touch(hud_state *h, void *id, int phase, float x, float y) {
   return 1;
 }
 
+/* the controller's (hud_pad) */
+static int PAD, PAD_ANALOG, PAD_GEAR;
+static float PAD_STEER, PAD_THROTTLE, PAD_BRAKE;
+
 void hud_touch(hud_state *h, void *id, int phase, float x, float y) {
+  if (PAD) return; /* (its keys are not on the screen: a palm on the glass presses nothing) */
   rect brake = h->gyro ? key(G_BRAKE, KEY_LEFT) : key(BRAKE, KEY_RIGHT);
   rect up = key(h->gyro ? G_SHIFT_UP : SHIFT_UP, KEY_RIGHT), down = key(h->gyro ? G_SHIFT_DOWN : SHIFT_DOWN, KEY_RIGHT);
   rect throttle = key(THROTTLE, KEY_RIGHT), left = key(LEFT, KEY_LEFT), right = key(RIGHT, KEY_LEFT);
@@ -220,6 +225,9 @@ void hud_input(hud_state *h, car_input *in) {
   in->analog = h->gyro || h->steer_mode == HUD_STEER_WHEEL || h->steer_mode == HUD_STEER_STICK;
   in->throttle = h->throttle_touch ? (h->slide ? h->throttle_v : 1.0f) : 0.0f;
   in->brake = h->brake_touch ? (h->slide ? h->brake_v : 1.0f) : 0.0f;
+  if (PAD) in->steer = PAD_STEER, in->analog = PAD_ANALOG, in->throttle = PAD_THROTTLE, in->brake = PAD_BRAKE;
+  in->gear = PAD_GEAR;
+  PAD_GEAR = 0;
   in->shift_up = h->shift_up > 0;
   in->shift_down = h->shift_down > 0;
   h->shift_up = h->shift_down = 0;
@@ -1578,6 +1586,7 @@ static struct {
 } cut;
 
 static int keys_pause_only(void) { return ten_level >= 0 && (!ten_disp || cut.state); }
+int hud_pause_only(void) { return keys_pause_only(); }
 
 static void cut_reset(void) {
   memset(&cut, 0, sizeof cut);
@@ -2285,7 +2294,7 @@ void hud_draw(const hud_state *h, const car_state *car, const car_input *in, flo
   ten_disp_update(&car->race);
   int consoles = ten_level < 0 || ten_disp, all_keys = !keys_pause_only();
 
-  draw_keys(h, car->steer, all_keys);
+  if (!PAD) draw_keys(h, car->steer, all_keys);
   glUniformMatrix4fv(u_proj, 1, GL_FALSE, proj.m);
 
   /* small fps counter, top-left: at the screen's own edge (a phone's 16:9 has its view key,
@@ -2318,7 +2327,7 @@ void hud_draw(const hud_state *h, const car_state *car, const car_input *in, flo
   /* the AT/MT switch (a touch key of the port, not a console: shown while the 10-in-a-row
    * hides the consoles too) shows the gearbox in use with the shifter's own tag */
   int tag = car->manual ? SPR_TAG_MT : SPR_TAG_AT;
-  if (tex_prog && SPR[tag].tex && all_keys) {
+  if (tex_prog && SPR[tag].tex && all_keys && !PAD) {
     glUseProgram(tex_prog);
     mat4 top = key_ortho(h->screen_w, h->screen_h, KEY_TOP);
     glUniformMatrix4fv(u_tproj, 1, GL_FALSE, top.m);
@@ -2487,6 +2496,7 @@ void hud_draw_menu_erase(float screen_w, float screen_h, int held, int armed) {
 }
 
 void hud_draw_menu_keys(float screen_w, float screen_h, int held, int keys, int back) {
+  if (PAD) return; /* (the d-pad and B do these) */
   glUseProgram(prog);
   mat4 proj = screen_ortho(screen_w, screen_h);
   glUniformMatrix4fv(u_proj, 1, GL_FALSE, proj.m);
@@ -2659,6 +2669,28 @@ void hud_lift(float dy, float left) {
   hud_lift_parts(dy, dy, dy, left, left);
   /* the back mirror is on here: the top keys either side of it again, as on the iPad */
   PAUSE.x = 236, RESET.x = 296, CAMERA.x = 116, TRANS.x = 176;
+}
+
+void hud_pad_gear(int gear) { PAD_GEAR = gear; }
+
+/* the consoles' gap to the screen's foot with the touch keys gone (layout px) */
+#define PAD_FOOT 14.0f
+
+void hud_pad(int on, float steer, int analog, float throttle, float brake) {
+  /* the keys gone, the consoles they were lifted clear of go down to the screen's foot: the
+   * meters and the plate by the plate's gap, the map and the gate by the gate's (the pill stays);
+   * the keys back, the same moves undone */
+  static float right, left;
+  if (on && !PAD) {
+    right = 768.0f - PAD_FOOT - (INFO_Y + SPR[SPR_PLATE].h * HUD_K);
+    left = 768.0f - PAD_FOOT - (SHIFT_Y + 0.5f * SPR[SPR_SHIFT6].h * SHIFT_K);
+  }
+  if (on != PAD) {
+    float r = on ? right : -right, l = on ? left : -left;
+    CLUSTER_Y += r, INFO_Y += r;
+    SHIFT_Y += l, MAP_UP -= l;
+  }
+  PAD = on, PAD_STEER = steer, PAD_ANALOG = analog, PAD_THROTTLE = throttle, PAD_BRAKE = brake;
 }
 
 /* ---- the player's own key layout (hud.h hud_layout_set) ---- */

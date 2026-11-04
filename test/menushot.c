@@ -6,6 +6,9 @@
  *   start      the start button
  *   movie      the attract movie ended
  *   mem        iOS warns of low memory
+ *   p BUTTONS LX RX RY RT  the controller (app.h's PAD_* sum, left stick x, right stick x and y, right
+ *              trigger) from now on; p 0 0 0 0 0 still connected, with nothing held
+ *   q          the controller gone
  *   z MS       sleep MS milliseconds (the loading thread's time to work)
  *   s NAME     save the frame as NAME (binary PPM)
  * With WMMT_THREAD set the loading runs on a thread of its own, as on the iPad (app_loader). 
@@ -55,10 +58,20 @@ static void *loader(void *arg) {
 
 /* a frame, then what main.m does after its presentRenderbuffer; the BGM as main.m would
  * change it (app_bgm's names are constants) */
+static int pad_on, pad_buttons;
+static float pad_lx, pad_rx, pad_ry, pad_rt;
+
 static void step_frame(void) {
   static const char *bgm;
   static long frames;
-  app_frame(1.0f / (getenv("WMMT_HZ") ? atof(getenv("WMMT_HZ")) : 60.0f));
+  float dt = 1.0f / (getenv("WMMT_HZ") ? atof(getenv("WMMT_HZ")) : 60.0f);
+  if (pad_on) app_pad(dt, pad_on, pad_buttons, pad_lx, 0, pad_rx, pad_ry, 0, pad_rt);
+  app_frame(dt);
+  static float music = -1;
+  if (app_bgm_level() != music) fprintf(stderr, "music level %.2f\n", music = app_bgm_level());
+  float rumble;
+  int rumble_ms = app_rumble(&rumble);
+  if (rumble_ms) fprintf(stderr, "rumble %d ms %.2f\n", rumble_ms, rumble);
   app_frame_done(0);
   const char *track = app_bgm();
   if (track != bgm) printf("bgm %s at frame %ld\n", track ? track : "(none)", frames);
@@ -125,6 +138,11 @@ int main(int argc, char **argv) {
       app_touch((void *)2, TOUCH_BEGAN, x, y);
     } else if (!strcmp(cmd, "u") && sscanf(line, "u %f %f", &x, &y) == 2) {
       app_touch((void *)2, TOUCH_ENDED, x, y);
+    } else if (!strcmp(cmd, "p") && sscanf(line, "p %d %f %f %f %f", &k, &pad_lx, &pad_rx, &pad_ry, &pad_rt) == 5) {
+      pad_buttons = k, pad_on = 2;
+    } else if (!strcmp(cmd, "q")) {
+      pad_on = 0;
+      app_pad(0, 0, 0, 0, 0, 0, 0, 0, 0);
     } else if (!strcmp(cmd, "start")) {
       app_press_start();
     } else if (!strcmp(cmd, "z") && sscanf(line, "z %d", &k) == 1) {

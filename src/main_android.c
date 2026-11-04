@@ -35,7 +35,7 @@ typedef struct { int id, phase; float x, y; } touch_ev;
 static struct {
   JavaVM *vm;
   jobject activity;
-  jmethodID show_movie, play_bgm, bgm_level, fail;
+  jmethodID show_movie, play_bgm, bgm_level, fail, pad_rumble;
   char data_dir[512], save_dir[512];
   pthread_mutex_t mx;
   pthread_cond_t cv;
@@ -46,6 +46,10 @@ static struct {
   int press_start, movie_done_ev, memory_warning;
   float tilt;
   int tilt_new, wants_tilt;
+  /* the controller: its state now; pad_latch the buttons pressed since the last frame, so a
+   * press and release between two frames still counts */
+  int pad_on, pad_buttons, pad_latch;
+  float pad_axis[6];
   /* the game thread's own */
 #ifdef WMMT_VK
   int vk_up, have_surface;
@@ -280,7 +284,8 @@ static void *game(void *arg) {
   for (;;) {
     touch_ev tv[TOUCH_MAX];
     int nt, press, done, warn, tilt_new;
-    float tilt;
+    float tilt, pad_axis[6];
+    int pad_on, pad_buttons;
     pthread_mutex_lock(&A.mx);
     while (A.paused || (!A.window && !A.window_changed)) {
       if (A.started && !away && !failed) {
@@ -302,6 +307,9 @@ static void *game(void *arg) {
     A.press_start = A.movie_done_ev = A.memory_warning = 0;
     tilt = A.tilt, tilt_new = A.tilt_new;
     A.tilt_new = 0;
+    pad_on = A.pad_on, pad_buttons = A.pad_buttons | A.pad_latch;
+    A.pad_latch = 0;
+    memcpy(pad_axis, A.pad_axis, sizeof pad_axis);
     pthread_mutex_unlock(&A.mx);
     if (!SURFACE_UP) continue;
     if (!A.started) {
@@ -327,9 +335,16 @@ static void *game(void *arg) {
     double now = now_s();
     float dt = last > 0 ? (float)(now - last) : 1.0f / 30.0f;
     last = now;
+    app_pad(dt, pad_on, pad_buttons, pad_axis[0], pad_axis[1], pad_axis[2], pad_axis[3], pad_axis[4], pad_axis[5]);
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
     app_frame(dt);
     sync_movie();
+    float rumble;
+    int rumble_ms = app_rumble(&rumble);
+    if (rumble_ms) {
+      JNIEnv *env = env_here();
+      (*env)->CallVoidMethod(env, A.activity, A.pad_rumble, (jint)rumble_ms, (jint)(1.0f + 254.0f * rumble));
+    }
     /* depth and stencil need not go out to memory */
     static PFNGLDISCARDFRAMEBUFFEREXTPROC discard_fb;
     if (!discard_fb) discard_fb = (PFNGLDISCARDFRAMEBUFFEREXTPROC)eglGetProcAddress("glDiscardFramebufferEXT");
@@ -363,6 +378,7 @@ JNIEXPORT void JNICALL JFN(nativeStart)(JNIEnv *env, jclass cls, jobject activit
   A.play_bgm = (*env)->GetMethodID(env, cls, "playBgm", "(Ljava/lang/String;)V");
   A.bgm_level = (*env)->GetMethodID(env, cls, "bgmLevel", "(F)V");
   A.fail = (*env)->GetMethodID(env, cls, "fail", "(Ljava/lang/String;)V");
+  A.pad_rumble = (*env)->GetMethodID(env, cls, "padRumble", "(II)V");
   const char *d = (*env)->GetStringUTFChars(env, data, NULL), *s = (*env)->GetStringUTFChars(env, save, NULL);
   snprintf(A.data_dir, sizeof A.data_dir, "%s", d);
   snprintf(A.save_dir, sizeof A.save_dir, "%s", s);
@@ -406,6 +422,16 @@ JNIEXPORT void JNICALL JFN(nativeSurface)(JNIEnv *env, jclass cls, jobject surfa
 JNIEXPORT void JNICALL JFN(nativeTouch)(JNIEnv *env, jclass cls, jint id, jint phase, jfloat x, jfloat y) {
   pthread_mutex_lock(&A.mx);
   if (A.n_touch < TOUCH_MAX) A.touches[A.n_touch++] = (touch_ev){ id, phase, x, y };
+  pthread_mutex_unlock(&A.mx);
+}
+
+JNIEXPORT void JNICALL JFN(nativePad)(JNIEnv *env, jclass cls, jint on, jint buttons, jfloat lx, jfloat ly, jfloat rx, jfloat ry,
+                                      jfloat lt, jfloat rt) {
+  pthread_mutex_lock(&A.mx);
+  A.pad_on = on;
+  A.pad_buttons = buttons;
+  A.pad_latch |= buttons;
+  A.pad_axis[0] = lx, A.pad_axis[1] = ly, A.pad_axis[2] = rx, A.pad_axis[3] = ry, A.pad_axis[4] = lt, A.pad_axis[5] = rt;
   pthread_mutex_unlock(&A.mx);
 }
 

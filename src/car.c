@@ -918,6 +918,8 @@ static void first_frame(car_state *c) {
   c->on_ground = 1;
 }
 
+int car_gears(void) { return P.top_lever + 1; }
+
 void car_set_manual(car_state *c, int manual) {
   P.manual = manual != 0;
   c->manual = P.manual;
@@ -950,6 +952,7 @@ void car_update(car_state *c, const car_input *in) {
   if (P.manual) {
     if (in->shift_up && P.lever < P.top_lever) P.lever++;
     if (in->shift_down && P.lever > -1) P.lever--;
+    if (in->gear > 0 && in->gear - 1 <= P.top_lever) P.lever = in->gear - 1; /* (none past its top) */
   }
   WF(P.gin, c->steer);
 #ifdef WMMT_EGL

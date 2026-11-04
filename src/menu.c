@@ -1476,6 +1476,22 @@ int menu_meter(const menu_state *m) {
   return s > 0 && s < 3 && cs_open(m, 0, s) ? s : 0;
 }
 
+/* The card's BGM volume (nsAudio::SNDStreamSetVolumeTypeFromCard, data/audio.lua's
+ * BGM_VOLUME_TYPE_*: NONE 0, SMALL 0.30, MIDDLE 0.50, LARGE 0.70) over LARGE, the shells' volume
+ * at app_bgm_level 1. Its row (cardcheck_8_sel_volume), the HUD's, under the sound source's. */
+#define CS_VOLUMES 4
+static const float CS_VOLUME[CS_VOLUMES] = { 0.0f, 0.30f / 0.70f, 0.50f / 0.70f, 1.0f };
+#define CS_VOL_X 250.0f /* layout px */
+#define CS_VOL_Y 565.0f
+#define CS_VOL_W 160.0f
+#define CS_VOL_H 48.0f
+#define CS_VOL_DX 170.0f
+
+float menu_bgm_volume(const menu_state *m) {
+  if (m->maker < 0 || m->car < 0) return 1.0f;
+  return CS_VOLUME[CS_VOLUMES - 1 - m->quiet_car[m->maker][m->car]];
+}
+
 static void cardset_open(menu_state *m) {
   go(m, MENU_CARDSET);
   m->tap = m->key = m->key_held = m->back = m->leaving = 0;
@@ -1489,6 +1505,17 @@ static void cardset_step(menu_state *m, int tap, int back) {
     return;
   }
   if (!tap) return;
+  for (int k = 0; k < CS_VOLUMES; ++k) {
+    float x = CS_VOL_X + CS_VOL_DX * (float)k, tx = m->tap_x * 1.6f, ty = m->tap_y * 1.6f;
+    if (tx < x || tx >= x + CS_VOL_W || ty < CS_VOL_Y || ty >= CS_VOL_Y + CS_VOL_H) continue;
+    signed char *v = &m->quiet_car[m->maker][m->car];
+    if (*v != CS_VOLUMES - 1 - k) {
+      snd_menu(SND_CURSOR);
+      *v = (signed char)(CS_VOLUMES - 1 - k);
+      m->garage_changed = 1;
+    }
+    return;
+  }
   for (int row = 0; row < 2; ++row) {
     float y = row ? CS_ROW1 : CS_ROW0;
     if (m->tap_y < y - 40.0f || m->tap_y >= y + 40.0f) continue;
@@ -1545,6 +1572,15 @@ static void draw_cardset(const menu_state *m, int clock, int bars, float screen_
       }
     }
   }
+  static const char *const VOLUME[CS_VOLUMES] = { "OFF", "SMALL", "MIDDLE", "LARGE" };
+  hud_ui_text("VOLUME", 24.0f * k16, CS_VOL_Y + 13.5f, 3, 1, 1, 1, 1);
+  for (int k = 0; k < CS_VOLUMES; ++k) {
+    float x = CS_VOL_X + CS_VOL_DX * (float)k;
+    int on = CS_VOLUMES - 1 - m->quiet_car[m->maker][m->car] == k;
+    float c = on ? 1.0f : 0.45f;
+    hud_ui_button(x, CS_VOL_Y, CS_VOL_W, CS_VOL_H, on);
+    hud_ui_text(VOLUME[k], x + 0.5f * (CS_VOL_W - hud_ui_text_width(VOLUME[k], 3)), CS_VOL_Y + 13.5f, 3, c, c, c, 1);
+  }
   const char *t = "CARD SETTINGS";
   hud_ui_text(t, 24.0f * k16, 40.0f * k16, 4.0f, 1, 1, 1, 1);
   const float *d = CS_DONE;
@@ -1599,7 +1635,7 @@ static int setting_step(menu_state *m, int tap, int key) {
     setting_chips(xc);
     if (m->tap_y >= SET_ROW_Y - 16.0f && m->tap_y < SET_ROW_Y + 46.0f && m->tap_x >= xc[2] - SET_CHIP_GAP * 0.5f) {
       int want = m->tap_x >= xc[3] - SET_CHIP_GAP * 0.5f;
-      if (m->manual != want) snd_menu(SND_CURSOR), m->manual = want, m->garage_changed = 1;
+      if (MENU_MANUAL(m) != want) snd_menu(SND_CURSOR), MENU_MANUAL(m) = want, m->garage_changed = 1;
     }
     return 0;
   }
@@ -1617,11 +1653,11 @@ static int setting_step(menu_state *m, int tap, int key) {
       if (m->tap_x > x[k] + anm_sprite_width(anm_sprite(SET_TEXT + k)) + SET_CHIP_GAP * 0.5f) break;
       if (k < 2 && m->tune_locked) return 0;
       signed char *v = k < 2 ? &m->tune_full[mk][c] : NULL;
-      int now = k < 2 ? *v : m->manual, want = k & 1;
+      int now = k < 2 ? *v : MENU_MANUAL(m), want = k & 1;
       if (now != want) {
         snd_menu(SND_CURSOR);
         if (v) *v = (signed char)want;
-        else m->manual = want;
+        else MENU_MANUAL(m) = want;
         m->garage_changed = 1;
       }
       return 0;
@@ -1648,7 +1684,7 @@ static void draw_setting(const menu_state *m, int clock, void (*draw3d)(void *),
   anm_draw_sprite(anm_sprite(T_SET_COURSE_BAND), -1.7f, 84.3f, 0.5f);
   float x[4];
   setting_chips(x);
-  int lit[4] = { !full, full, !m->manual, m->manual };
+  int lit[4] = { !full, full, !MENU_MANUAL(m), MENU_MANUAL(m) };
   /* a saved car's mode fixed: only its chip */
   for (int k = 0; k < 4; ++k)
     if (!(k < 2 && m->tune_locked && !lit[k]))
@@ -1894,6 +1930,7 @@ static const float LAY_BUTTON[LAY_BUTTONS][4] = { { 296, 356, 110, 56 }, { 618, 
 static const char *const LAY_GROUP[3] = { "TOP KEYS", "LEFT KEYS", "RIGHT KEYS" };
 /* the OPTION screen's key to it (640 x 480) */
 static const float OPT_LAYOUT_KEY[4] = { 446, 198, 176, 28 };
+static const float OPT_PAD_KEY[4] = { 446, 100, 176, 28 }; /* (on the CONTROLS band) */
 #define LAY_K_STEP 10
 
 static int layout_button(float x, float y) {
@@ -2007,14 +2044,105 @@ static void draw_layout(const menu_state *m, int clock, float screen_w, float sc
   hud_draw_layout(screen_w, screen_h, m->gyro, g);
 }
 
-/* the OPTION screen's key to KEY LAYOUT (its words the HUD's, over the bars like RESOLUTION's) */
-static void draw_option_layout_key(float screen_w, float screen_h) {
-  const float *r = OPT_LAYOUT_KEY, k = 1.6f;
+/* the OPTION screen's key to KEY LAYOUT or CONTROLLER (its words the HUD's, over the bars like
+ * RESOLUTION's) */
+static void draw_option_key(float screen_w, float screen_h, const float *r, const char *s) {
+  const float k = 1.6f;
   hud_ui_begin(screen_w, screen_h);
   hud_ui_button(r[0] * k, r[1] * k, r[2] * k, r[3] * k, 0);
-  const char *s = "KEY LAYOUT >";
   hud_ui_text(s, (r[0] + 0.5f * r[2]) * k - 0.5f * hud_ui_text_width(s, OPT_ROW_PX), (r[1] + 0.5f * r[3]) * k - 3.5f * OPT_ROW_PX,
               OPT_ROW_PX, 1, 1, 1, 1);
+  hud_ui_end();
+}
+
+/* ---- the OPTION screen's CONTROLLER (MENU_PAD, the port's; while one is connected): a panel of
+ * rows in layout px, each its label and its keys ---- */
+enum { PR_STEER, PR_THROTTLE, PR_BRAKE, PR_STICK, PR_TRIGGER, PR_RUMBLE, PR_SHIFT, PR_SHIFT_DEAD, PAD_ROWS };
+static const float PAD_PANEL[4] = { 80, 120, 864, 540 };
+#define PAD_ROW_X 440.0f
+#define PAD_ROW_Y 168.0f
+#define PAD_ROW_DY 60.0f
+#define PAD_ROW_H 48.0f
+
+static int pad_keys(int row) { return row == PR_RUMBLE ? MENU_PAD_RUMBLE_MAX + 1 : 2; }
+static int pad_dead_row(int row) { return row == PR_STICK || row == PR_TRIGGER || row == PR_SHIFT_DEAD; }
+
+/* key k of a row: the two choices wide, the dead zone's - and + at its ends, the motors' four */
+static void pad_key_rect(int row, int k, float r[4]) {
+  int dead = pad_dead_row(row);
+  float w = dead || row == PR_RUMBLE ? 110.0f : 230.0f, dx = dead ? 360.0f : w + 10.0f;
+  r[0] = PAD_ROW_X + dx * (float)k, r[1] = PAD_ROW_Y + PAD_ROW_DY * (float)row, r[2] = w, r[3] = PAD_ROW_H;
+}
+
+static void pad_step(menu_state *m, int tap, int back) {
+  if (back) {
+    snd_menu(SND_CANCEL);
+    go(m, MENU_OPTION);
+    return;
+  }
+  if (!tap) return;
+  float x = m->tap_x * 1.6f, y = m->tap_y * 1.6f;
+  for (int row = 0; row < PAD_ROWS; ++row)
+    for (int k = 0; k < pad_keys(row); ++k) {
+      float r[4];
+      pad_key_rect(row, k, r);
+      if (x < r[0] || x >= r[0] + r[2] || y < r[1] || y >= r[1] + r[3]) continue;
+      if (row <= PR_BRAKE) {
+        m->pad_digital[row] = k;
+      } else if (row == PR_RUMBLE) {
+        m->pad_rumble = k;
+        m->pad_test = k > 0; /* (feel what it was set to) */
+      } else if (row == PR_SHIFT) {
+        m->pad_shift = k;
+      } else if (row == PR_SHIFT_DEAD) {
+        int to = m->pad_shift_dead + (k ? 5 : -5);
+        if (to < MENU_PAD_SHIFT_DEAD_MIN || to > MENU_PAD_SHIFT_DEAD_MAX) return;
+        m->pad_shift_dead = to;
+      } else {
+        int *v = row == PR_STICK ? &m->pad_stick_dead : &m->pad_trigger_dead;
+        int to = *v + (k ? 2 : -2);
+        if (to < 0 || to > MENU_PAD_DEAD_MAX) return;
+        *v = to;
+      }
+      snd_menu(SND_CURSOR);
+      m->garage_changed = 1;
+      return;
+    }
+}
+
+static void draw_pad(const menu_state *m, int clock, float screen_w, float screen_h) {
+  static const char *const LABEL[PAD_ROWS] = { "STEERING", "THROTTLE", "BRAKE", "STICK DEADZONE", "TRIGGER DEADZONE", "RUMBLE",
+                                                "RIGHT STICK SHIFT", "SHIFT DEADZONE" };
+  static const char *const INPUT[2] = { "ANALOG", "DIGITAL" }, *const DEAD[2] = { "-", "+" }, *const OFF_ON[2] = { "OFF", "ON" };
+  static const char *const RUMBLE[4] = { "OFF", "LOW", "MED", "HIGH" };
+  draw_back(ID.bg, clock % 600, 1);
+  anm_fill(0, 0, 0, 0.6f);
+  hud_ui_begin(screen_w, screen_h);
+  const float *p = PAD_PANEL;
+  hud_ui_rect(p[0], p[1], p[2], p[3], 0.03f, 0.04f, 0.06f, 0.82f);
+  hud_ui_rect(p[0], p[1], p[2], 3, 1.0f, 0.42f, 0.05f, 0.95f);
+  layout_text_mid("CONTROLLER", p[1] + 14, 4, 1, 1, 1);
+  for (int row = 0; row < PAD_ROWS; ++row) {
+    float r[4];
+    pad_key_rect(row, 0, r);
+    hud_ui_text(LABEL[row], p[0] + 24.0f, r[1] + 0.5f * (PAD_ROW_H - 21.0f), 3, 1, 1, 1, 1);
+    int dead = pad_dead_row(row);
+    int now = row <= PR_BRAKE ? m->pad_digital[row] : row == PR_RUMBLE ? m->pad_rumble : row == PR_SHIFT ? m->pad_shift : -1;
+    for (int k = 0; k < pad_keys(row); ++k) {
+      pad_key_rect(row, k, r);
+      hud_ui_button(r[0], r[1], r[2], r[3], k == now);
+      const char *s = dead ? DEAD[k] : row == PR_RUMBLE ? RUMBLE[k] : row == PR_SHIFT ? OFF_ON[k] : INPUT[k];
+      float px = dead ? 5.0f : 3.0f, on = dead || k == now ? 1.0f : 0.45f;
+      hud_ui_text(s, r[0] + 0.5f * (r[2] - hud_ui_text_width(s, px)), r[1] + 0.5f * (r[3] - 7.0f * px), px, on, on, on, 1);
+    }
+    if (dead) {
+      char v[8];
+      snprintf(v, sizeof v, "%d", row == PR_STICK ? m->pad_stick_dead : row == PR_TRIGGER ? m->pad_trigger_dead : m->pad_shift_dead);
+      pad_key_rect(row, 0, r);
+      hud_ui_text(v, r[0] + 235.0f - 0.5f * hud_ui_text_width(v, 4), r[1] + 0.5f * (PAD_ROW_H - 28.0f), 4, 1.0f, 0.55f, 0.15f, 1);
+    }
+  }
+  if (m->pad_on && !m->pad_motors) layout_text_mid("THIS CONTROLLER HAS NO RUMBLE", p[1] + p[3] - 18, 2, 1.0f, 0.55f, 0.15f);
   hud_ui_end();
 }
 
@@ -2029,6 +2157,12 @@ static void option_step(menu_state *m, int tap, int key) {
   if (m->tap_x >= lk[0] && m->tap_x < lk[0] + lk[2] && m->tap_y >= lk[1] - 4 && m->tap_y < lk[1] + lk[3] + 4) {
     snd_menu(SND_SELECT);
     layout_enter(m);
+    return;
+  }
+  const float *pk = OPT_PAD_KEY;
+  if (m->pad_on && m->tap_x >= pk[0] && m->tap_x < pk[0] + pk[2] && m->tap_y >= pk[1] - 4 && m->tap_y < pk[1] + pk[3] + 4) {
+    snd_menu(SND_SELECT);
+    go(m, MENU_PAD);
     return;
   }
   int k = option_chip(m, O_BUTTONS, OPT_STEER_Y);
@@ -2391,7 +2525,7 @@ static void own_clear(menu_state *m, int mk, int c) {
   m->class_car[mk][c] = 0;
   m->vs_stars_car[mk][c] = m->vs_count_car[mk][c] = 0;
   m->st_bonus_car[mk][c] = 0;
-  m->meter_car[mk][c] = m->sound_car[mk][c] = 0;
+  m->meter_car[mk][c] = m->sound_car[mk][c] = m->quiet_car[mk][c] = m->manual_car[mk][c] = 0;
 }
 
 /* the colour select's ALL PARTS key (a new kind of car's card, or one already in the save) */
@@ -2409,9 +2543,9 @@ static void own_register(menu_state *m) {
     k = m->n_own++;
     m->own[k] = (menu_own){ (signed char)mk, (signed char)c, (signed char)m->color, (long long)time(NULL), 0 };
     /* (the mode the setting chose kept) */
-    signed char full = m->tune_full[mk][c], power = m->tune_power[mk][c];
+    signed char full = m->tune_full[mk][c], power = m->tune_power[mk][c], gearbox = m->manual_car[mk][c];
     own_clear(m, mk, c);
-    if (m->new_card) m->tune_full[mk][c] = full, m->tune_power[mk][c] = power;
+    if (m->new_card) m->tune_full[mk][c] = full, m->tune_power[mk][c] = power, m->manual_car[mk][c] = gearbox;
   }
   if (m->all_parts && k >= 0) {
     /* ALL PARTS: every dress-up part won (aero sets, wings, bonnets, mirrors, wheels, neons,
@@ -2934,8 +3068,8 @@ static void pause_decide(menu_pause *p) {
 }
 
 static int pause_step(menu_pause *p) {
-  int tap = p->tap;
-  p->tap = 0;
+  int tap = p->tap, pad = p->pad;
+  p->tap = p->pad = 0;
   p->open++;
   if (p->deciding) return --p->deciding ? MENU_PAUSED : p->sel ? MENU_LEAVE : MENU_RESUME;
   if (p->slide) {
@@ -2947,6 +3081,16 @@ static int pause_step(menu_pause *p) {
     return MENU_PAUSED;
   }
   p->card_t++;
+  if (p->open >= PAUSE_IN && (pad == MENU_PAD_OK || (pad == MENU_PAD_RESUME && !p->sel))) {
+    pause_decide(p);
+    return MENU_PAUSED;
+  }
+  if (p->open >= PAUSE_IN && (pad == MENU_PAD_MOVE || pad == MENU_PAD_RESUME)) {
+    snd_menu(SND_CURSOR);
+    p->slide = SLIDE;
+    p->go = pad == MENU_PAD_RESUME; /* (NO at rest: over to YES, and decided) */
+    return MENU_PAUSED;
+  }
   if (!tap || p->open < PAUSE_IN) return MENU_PAUSED;
   if (pause_on_card(p, p->sel)) {
     pause_decide(p);
@@ -5213,6 +5357,9 @@ void menu_init(menu_state *m) {
   menu_garage_reset(m);
   m->gyro = 0, m->gyro_sens = 5, m->over_on = 1, m->sharp_on = 1, m->ao_on = 1, m->bm_on = 1;
   for (int g = 0; g < 3; ++g) m->key_k[g] = 100, m->key_dx[g] = m->key_dy[g] = 0;
+  /* (a pad's sticks rest a little off centre) */
+  m->pad_stick_dead = 12, m->pad_trigger_dead = 4, m->pad_rumble = 2;
+  m->pad_shift_dead = 50;
   m->poem = -1;
   /* (the SSAO off: its 20 ms on the Mi 6 cost the 60 fps) */
   m->hd_tex = 1, m->bloom_on = 1, m->ssao_on = 0, m->wet_on = 1, m->paint_on = 1, m->aa4 = 1;
@@ -5234,7 +5381,7 @@ void menu_garage_reset(menu_state *m) {
   /* every car stock, its full tune leaning to power (the port's tune before the setting) */
   memset(m->tune_full, 0, sizeof m->tune_full);
   memset(m->tune_power, CAR_TUNE_MAX, sizeof m->tune_power);
-  m->manual = 0;
+  memset(m->manual_car, 0, sizeof m->manual_car);
   m->st_div = m->st_bits = 0;
   m->st_level = 0;
   m->ten_course = m->ten_level = 0;
@@ -5266,6 +5413,7 @@ void menu_garage_reset(menu_state *m) {
   memset(m->st_bonus_car, 0, sizeof m->st_bonus_car);
   memset(m->meter_car, 0, sizeof m->meter_car);
   memset(m->sound_car, 0, sizeof m->sound_car);
+  memset(m->quiet_car, 0, sizeof m->quiet_car);
   m->title_n = 0;
   memset(m->name, -1, sizeof m->name);
 }
@@ -5303,6 +5451,43 @@ int menu_movie(const menu_state *m) { return m->screen == MENU_MOVIE ? m->demo %
 
 void menu_movie_done(menu_state *m) {
   if (m->screen == MENU_MOVIE) go(m, MENU_TITLE);
+}
+
+/* a press of the bar's own keys (HUD_MENU_OPTION, HUD_MENU_HIDDEN); 0 if the screen has none */
+static int bar_key(menu_state *m, int key) {
+  /* the maker select's and the SAVE DATA screen's gear key: the OPTION screen */
+  if (key == HUD_MENU_OPTION && (m->screen == MENU_MAKER || (m->screen == MENU_SAVE && !m->save_confirm))) {
+    m->option = 1;
+    return 1;
+  }
+  /* the maker select's hidden cars key */
+  if (key == HUD_MENU_HIDDEN && m->screen == MENU_MAKER) {
+    m->hidden = 1;
+    return 1;
+  }
+  /* the colour select's ALL PARTS key (a new kind of car's): on and off */
+  if (key == HUD_MENU_HIDDEN && all_parts_shown(m)) {
+    m->all_parts ^= 1;
+    snd_menu(SND_CURSOR);
+    return 1;
+  }
+  /* the save's car view's bin (in the gear key's place) */
+  if (key == HUD_MENU_OPTION && m->screen == MENU_GARAGE && !m->deciding) {
+    m->erase = 1;
+    return 1;
+  }
+  /* the car setting's wheel key (in the gear key's place): the dress-up menu (a new car's
+   * once its card is made) */
+  if (key == HUD_MENU_OPTION && m->screen == MENU_SETTING && !m->new_card && !m->deciding) {
+    m->dress = 1;
+    return 1;
+  }
+  /* the votes' omakase key */
+  if (key == HUD_MENU_HIDDEN && vs_omakase_shown(m)) {
+    vs_omakase(m);
+    return 1;
+  }
+  return 0;
 }
 
 void menu_touch(menu_state *m, void *id, int phase, float x, float y) {
@@ -5354,41 +5539,7 @@ void menu_touch(menu_state *m, void *id, int phase, float x, float y) {
     m->vs.held = vs_hit(m, x, y) + 1;
     return;
   }
-  /* the maker select's and the SAVE DATA screen's gear key: the OPTION screen */
-  if (key == HUD_MENU_OPTION && (m->screen == MENU_MAKER || (m->screen == MENU_SAVE && !m->save_confirm))) {
-    m->option = 1;
-    m->key_held = key;
-    return;
-  }
-  /* the maker select's hidden cars key */
-  if (key == HUD_MENU_HIDDEN && m->screen == MENU_MAKER) {
-    m->hidden = 1;
-    m->key_held = key;
-    return;
-  }
-  /* the colour select's ALL PARTS key (a new kind of car's): on and off */
-  if (key == HUD_MENU_HIDDEN && all_parts_shown(m)) {
-    m->all_parts ^= 1;
-    snd_menu(SND_CURSOR);
-    m->key_held = key;
-    return;
-  }
-  /* the save's car view's bin (in the gear key's place) */
-  if (key == HUD_MENU_OPTION && m->screen == MENU_GARAGE && !m->deciding) {
-    m->erase = 1;
-    m->key_held = key;
-    return;
-  }
-  /* the car setting's wheel key (in the gear key's place): the dress-up menu (a new car's
-   * once its card is made) */
-  if (key == HUD_MENU_OPTION && m->screen == MENU_SETTING && !m->new_card && !m->deciding) {
-    m->dress = 1;
-    m->key_held = key;
-    return;
-  }
-  /* the votes' omakase key */
-  if (key == HUD_MENU_HIDDEN && vs_omakase_shown(m)) {
-    vs_omakase(m);
+  if (bar_key(m, key)) {
     m->key_held = key;
     return;
   }
@@ -8537,9 +8688,9 @@ static void step(menu_state *m) {
       if (m->card_back == MENU_SETTING) {
         /* a new car's card: not kept yet, its setting again (its choice there kept) */
         int mk = m->maker, c = m->car;
-        signed char full = m->tune_full[mk][c], power = m->tune_power[mk][c];
+        signed char full = m->tune_full[mk][c], power = m->tune_power[mk][c], gearbox = m->manual_car[mk][c];
         keep_drop(m);
-        m->tune_full[mk][c] = full, m->tune_power[mk][c] = power;
+        m->tune_full[mk][c] = full, m->tune_power[mk][c] = power, m->manual_car[mk][c] = gearbox;
         m->new_card = 1;
         m->tune_locked = 0;
       }
@@ -8565,6 +8716,10 @@ static void step(menu_state *m) {
   }
   if (m->screen == MENU_LAYOUT) {
     layout_step(m, back);
+    return;
+  }
+  if (m->screen == MENU_PAD) {
+    pad_step(m, tap, back);
     return;
   }
   if (m->screen == MENU_OPTION) {
@@ -8808,6 +8963,62 @@ static void step(menu_state *m) {
     m->t = 0;
   }
 }
+
+/* ---- the controller ---- */
+
+int menu_pad_free(const menu_state *m) {
+  return m->screen == MENU_SAVE || m->screen == MENU_NAME || m->screen == MENU_OPTION || m->screen == MENU_LAYOUT ||
+         m->screen == MENU_CARDSET || m->screen == MENU_VS || m->screen == MENU_PAD;
+}
+
+/* the middle of a sprite in a frame, if it is there */
+static int pad_mid(int anim, int frame, int sprite, float *x, float *y) {
+  float r[4];
+  if (!anm_sprite_rect(anim, frame, anm_sprite(sprite), r)) return 0;
+  *x = 0.5f * (r[0] + r[2]), *y = 0.5f * (r[1] + r[3]);
+  return 1;
+}
+
+void menu_pad_ok(menu_state *m) {
+  /* (1, 1), on no item: the screens where any tap goes on, and the dress-up's where a tap on
+   * nothing decides the place chosen */
+  float x = 1.0f, y = 1.0f;
+  switch (m->screen) {
+  case MENU_MAKER: x = MAKER_X0 + MAKER_DX * (float)m->sel + 0.5f * MAKER_W, y = 0.5f * (MAKER_Y0 + MAKER_Y1); break;
+  case MENU_COLOR: {
+    const cardb_car *c = chosen_car(m, m->car);
+    pad_mid(ID.col_strip[strip_index(c->ncolors)], color_frame(m), T_SWATCH + c->ncolors - m->sel, &x, &y);
+    break;
+  }
+  case MENU_CAR: case MENU_TG_AERO: case MENU_TG_GET: case MENU_TEN_LEVEL: x = 320.0f, y = 240.0f; break;
+  case MENU_SETTING: case MENU_GARAGE: case MENU_ST_TUNE:
+    x = 0.5f * (SET_CAR_X0 + SET_CAR_X1), y = 0.5f * (SET_CAR_Y0 + SET_CAR_Y1);
+    break;
+  case MENU_GAME: case MENU_VS_SEL: x = 320.0f, y = 400.0f; break;
+  case MENU_MODE: x = m->sel ? 480.0f : 160.0f, y = 240.0f; break;
+  case MENU_COURSE: case MENU_TEN_COURSE: x = 18.0f + 88.5f * (float)m->sel + course_dx(m) + 82.0f, y = 200.0f; break;
+  case MENU_VS_AREA: x = 88.0f * (float)m->vs.item - 10.0f + m->vs.scroll + 82.0f, y = 200.0f; break;
+  case MENU_ST_LEVEL: x = 320.0f, y = 350.0f; break;
+  case MENU_ST_RIVAL: st_place(st_frame(m), m->sel, &x, &y); break;
+  case MENU_BGM: pad_mid(day_anim(m), 100 * m->zone + m->card_t % 60, m->zone ? T_NIGHT : T_MORNING, &x, &y); break;
+  case MENU_HAVE: pad_mid(ID.day_cards, 100 * m->have_sel + m->card_t % 60, m->have_sel ? T_NIGHT : T_MORNING, &x, &y); break;
+  case MENU_SHOGO: pad_mid(ID.yn_rank, 100 * m->sel + m->card_t % 60, m->sel ? T_RW_NO : T_RW_YES, &x, &y); break;
+  }
+  m->tap_x = x, m->tap_y = y;
+  m->tap = 1;
+}
+
+void menu_pad_key(menu_state *m, int key) {
+  if (bar_key(m, key)) return;
+  /* the BGM select's "Use the view button to change music": a tap on its line (day_select_step) */
+  if (key == HUD_MENU_OPTION && m->screen == MENU_BGM) m->tap_x = 320.0f, m->tap_y = 360.0f, m->tap = 1;
+}
+
+void menu_pad_back(menu_state *m) {
+  if (m->screen >= MENU_MAKER) m->back = 1;
+}
+
+void menu_pad_pause(menu_state *m, int action) { m->pause.pad = action; }
 
 int menu_update(menu_state *m, float dt) {
   m->acc += dt;
@@ -9165,11 +9376,19 @@ void menu_draw(const menu_state *m, float screen_w, float screen_h, void (*draw3
     anm_fill(0, 0, 0, 1.0f - fade);
     return;
   }
+  if (m->screen == MENU_PAD) {
+    if (m->t < FADE) fade = (float)(m->t + 1) / FADE;
+    draw_pad(m, clock, screen_w, screen_h);
+    hud_draw_menu_keys(screen_w, screen_h, m->key_held, 0, 1);
+    anm_fill(0, 0, 0, 1.0f - fade);
+    return;
+  }
   if (m->screen == MENU_OPTION) {
     if (m->t < FADE) fade = (float)(m->t + 1) / FADE;
     draw_option(m, clock, bars);
     if (m->res_row) draw_option_res(m, screen_w, screen_h);
-    draw_option_layout_key(screen_w, screen_h);
+    draw_option_key(screen_w, screen_h, OPT_LAYOUT_KEY, "KEY LAYOUT >");
+    if (m->pad_on) draw_option_key(screen_w, screen_h, OPT_PAD_KEY, "CONTROLLER >");
     draw_option_steer(m);
     hud_draw_menu_keys(screen_w, screen_h, m->key_held, m->gyro == HUD_STEER_GYRO, 1);
     anm_fill(0, 0, 0, 1.0f - fade);

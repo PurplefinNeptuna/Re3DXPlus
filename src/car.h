@@ -11,6 +11,7 @@ typedef struct {
   float throttle; /* 0..1 */
   float brake;    /* 0..1 */
   int shift_up, shift_down; /* edge-triggered requests */
+  int gear;       /* the lever straight to this gear (1..), a controller's right stick; 0 none; MT only */
   int analog;     /* steer is the iPad's tilt (the gyro's), not the buttons' */
 } car_input;
 
@@ -302,6 +303,8 @@ void car_view(int view);
 /* One arcade frame (1/60 s). */
 void car_update(car_state *c, const car_input *in);
 float car_kmh(const car_state *c);
+/* the player's car's forward gears (after car_start) */
+int car_gears(void);
 
 /* The story's realtime movies (data/rtmovie, the arcade's YOURTMOVIE_CPP::clMovieSystem): the
  * movie (clEffStoryType's RtMovie id, MovieTableData.txt's row), the player's car (NULL: the

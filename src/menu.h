@@ -21,6 +21,7 @@ typedef struct {
   int deciding;    /* frames left of the decided card, then of the fade out (YES) or to white (NO) */
   int tap;
   float tap_x, tap_y;
+  int pad;         /* the controller's: MENU_PAD_* (menu_pad_pause) */
 } menu_pause;
 
 /* clTaResult's figures (its clArg, 0x97fda04), filled by the app as the race ends at the goal */
@@ -102,6 +103,9 @@ typedef struct {
    * second undefeated bonus unlocks) and BGM sound source (0 3/3DX/3DX+, 1 Maximum Tune & 2:
    * the clear bonus, 2 Wangan Midnight R: the undefeated bonus), per car */
   signed char meter_car[MENU_GARAGE_MAKERS][MENU_GARAGE_CARS], sound_car[MENU_GARAGE_MAKERS][MENU_GARAGE_CARS];
+  /* the card's BGM volume (cardcheck_8_sel_volume), steps down from BGM_VOLUME_TYPE_LARGE: 0 the
+   * default .. 3 NONE */
+  signed char quiet_car[MENU_GARAGE_MAKERS][MENU_GARAGE_CARS];
   int bonus_due, bonus_kind, bonus_t;
   int story_n;     /* and its place in the loop, 20 * division + 5 * level + episode */
   int course, official; /* the choice, once a race is ready */
@@ -150,7 +154,8 @@ typedef struct {
    * the rest of CAR_TUNE_TOTAL); and the gearbox, AT (0) or MT (1). menu.c sets
    * garage_changed when one changes; the app keeps them (data_dir/garage) and clears it. */
   signed char tune_full[MENU_GARAGE_MAKERS][MENU_GARAGE_CARS], tune_power[MENU_GARAGE_MAKERS][MENU_GARAGE_CARS];
-  int manual;
+  /* AT (0) or MT (1), the card's (cardcheck_7_sel_transmission) */
+  signed char manual_car[MENU_GARAGE_MAKERS][MENU_GARAGE_CARS];
   /* The port's OPTION screen (MENU_OPTION, the gear key on the maker select): steering by
    * the touch keys (0) or by tilting the iPad (1), the tilt's sensitivity (1..10) and the
    * bridge reflection on the car (on 1), the FSR sharpening (on 1), the cars' baked ambient
@@ -188,6 +193,14 @@ typedef struct {
    * options; the editor's chosen group, the finger dragging it (lay_drag) from where (lay_x, y
    * less the group's move), and a button of its panel tapped (lay_tap, 1 + LAY_*) */
   int key_k[3], key_dx[3], key_dy[3];
+  /* the OPTION screen's CONTROLLER (MENU_PAD), kept with the options: steering, throttle and
+   * brake digital (1 or 0, MENU_PAD_STEER..) or analog, the stick's and the triggers' dead zones
+   * (percent, 0..MENU_PAD_DEAD_MAX), the motors (0 off .. 3); from the app whether one is
+   * connected and has motors; pad_test asks a pulse of them */
+  int pad_digital[3], pad_stick_dead, pad_trigger_dead, pad_rumble;
+  /* and the right stick as the race's gear lever, past its own dead zone (percent) */
+  int pad_shift, pad_shift_dead;
+  int pad_on, pad_motors, pad_test;
   int lay_sel, lay_drag, lay_tap;
   void *lay_touch;
   float lay_x, lay_y;
@@ -432,7 +445,7 @@ enum { MENU_MOVIE, MENU_TITLE, MENU_RANKING, MENU_LOGO, MENU_PROLOGUE, MENU_STAR
        MENU_ST_LEVEL, MENU_ST_RIVAL, MENU_PRE, MENU_ST_TUNE, MENU_TEN_COURSE, MENU_TEN_LEVEL,
        MENU_TG_GET, MENU_TG_AERO, MENU_TG_PART, MENU_TG_WEAR, MENU_OPTION, MENU_SAVE, MENU_HAVE, MENU_GARAGE,
        MENU_CARD, MENU_LVUP, MENU_ST_EFF, MENU_TG_WHEEL, MENU_TG_SELECT, MENU_TG_MAKER, MENU_NAME,
-       MENU_TG_VINYL, MENU_VS, MENU_VS_SEL, MENU_VS_AREA, MENU_VS_MATCH, MENU_SHOGO, MENU_VS_STAR, MENU_INFO, MENU_LAYOUT, MENU_POEM, MENU_BONUS, MENU_CARDSET };
+       MENU_TG_VINYL, MENU_VS, MENU_VS_SEL, MENU_VS_AREA, MENU_VS_MATCH, MENU_SHOGO, MENU_VS_STAR, MENU_INFO, MENU_LAYOUT, MENU_POEM, MENU_BONUS, MENU_CARDSET, MENU_PAD };
 enum { MENU_GAME_STORY, MENU_GAME_TEN, MENU_GAME_TA, MENU_GAME_VS };
 
 /* The cars the car select shows in 3D this frame (the carousel, or the colour turntable),
@@ -570,6 +583,10 @@ void menu_ending_done(menu_state *m);
 float menu_bgm_level(const menu_state *m);
 /* the chosen car's meter for the race (hud_set_meter), its unlock checked */
 int menu_meter(const menu_state *m);
+/* the chosen car's gearbox */
+#define MENU_MANUAL(m) ((m)->manual_car[(m)->maker][(m)->car])
+/* the card's BGM volume over the loudest, 0..1 (1 with no car yet) */
+float menu_bgm_volume(const menu_state *m);
 /* the host closed the game under a versus race: back to MENU_VS, off, with `note` on it */
 void menu_vs_closed(menu_state *m, const char *note);
 /* The area vote's status byte (the lobby's HELLO, which the servers pass on unread): 0 the
@@ -623,6 +640,25 @@ int menu_wheel_next(const menu_state *m, int *out, int max);
 /* Taps on the items and the left/right keys (1024x768 points); with the pause menu open,
  * on its cards. */
 void menu_touch(menu_state *m, void *id, int phase, float x, float y);
+/* The controller's (app_pad). A screen of many buttons at free places (the saves, the name, the
+ * OPTION screen ...) has no one item chosen: menu_pad_free, and A is a tap at a cursor there.
+ * Elsewhere menu_pad_ok decides the item chosen, as a tap on it would. */
+int menu_pad_free(const menu_state *m);
+void menu_pad_ok(menu_state *m);
+/* the bottom bar's and top bar's own keys: HUD_MENU_OPTION (the gear, the bin, the wheel) or
+ * HUD_MENU_HIDDEN (hidden cars, ALL PARTS, omakase), as a tap on them, HUD_MENU_OPTION also the
+ * BGM select's next song; and the back key */
+void menu_pad_key(menu_state *m, int key);
+void menu_pad_back(menu_state *m);
+/* the pause menu: MENU_PAD_OK decides the card at rest, _MOVE slides to the other, _RESUME goes
+ * back to the race */
+enum { MENU_PAD_OK = 1, MENU_PAD_MOVE, MENU_PAD_RESUME };
+enum { MENU_PAD_STEER, MENU_PAD_THROTTLE, MENU_PAD_BRAKE };
+#define MENU_PAD_DEAD_MAX 50
+#define MENU_PAD_RUMBLE_MAX 3
+#define MENU_PAD_SHIFT_DEAD_MIN 20
+#define MENU_PAD_SHIFT_DEAD_MAX 90
+void menu_pad_pause(menu_state *m, int action);
 /* The start button: leaves the attract loop (not while it boots, menu_booting). */
 void menu_start(menu_state *m);
 /* The maker logos and the prologue the app boots into, before the first attract movie: no

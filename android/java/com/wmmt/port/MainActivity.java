@@ -7,7 +7,10 @@ import android.hardware.SensorEventListener;
 import android.hardware.SensorManager;
 import android.hardware.display.DisplayManager;
 import android.media.MediaPlayer;
+import android.hardware.input.InputManager;
 import android.os.Bundle;
+import android.view.InputDevice;
+import android.view.KeyEvent;
 import android.view.MotionEvent;
 import android.view.Surface;
 import android.view.SurfaceHolder;
@@ -24,12 +27,13 @@ import java.io.File;
  * from its own thread (src/main_android.c), the attract movies play in a VideoView over it,
  * the BGM in a MediaPlayer (both decode the AAC/H.264 in hardware); touches, the gravity for
  * steering by tilt and the lifecycle go down to the native side. */
-public class MainActivity extends Activity implements SurfaceHolder.Callback, SensorEventListener, DisplayManager.DisplayListener {
+public class MainActivity extends Activity implements SurfaceHolder.Callback, SensorEventListener, DisplayManager.DisplayListener, InputManager.InputDeviceListener {
   static { System.loadLibrary("wmmt"); }
 
   static native void nativeStart(MainActivity a, String dataDir, String saveDir);
   static native void nativeSurface(Surface s, int w, int h);
   static native void nativeTouch(int id, int phase, float x, float y);
+  static native void nativePad(int on, int buttons, float lx, float ly, float rx, float ry, float lt, float rt);
   static native void nativePause(boolean p);
   static native void nativeTilt(float radians);
   static native boolean nativeWantsTilt();
@@ -42,9 +46,16 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback, Se
   private SurfaceView game;
   private VideoView movie;
   private MediaPlayer bgm;
+  private float bgmVolume = 1.0f; /* app_bgm_level's: a new track takes it too */
   private String dataDir;
   private SensorManager sensors;
   private Sensor gravity;
+  /* the controller: app.h's PAD_* held on its keys and on its hat, its axes */
+  private InputManager inputs;
+  private boolean padOn;
+  private android.os.Vibrator padMotors; /* the connected pad's motors, null none */
+  private int padKeys, padHat;
+  private float padLx, padLy, padRx, padRy, padLt, padRt;
 
   @Override protected void onCreate(Bundle b) {
     super.onCreate(b);
@@ -79,6 +90,9 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback, Se
     }
     nativeStart(this, dataDir, dataDir);
     ((DisplayManager) getSystemService(DISPLAY_SERVICE)).registerDisplayListener(this, null);
+    inputs = (InputManager) getSystemService(INPUT_SERVICE);
+    inputs.registerInputDeviceListener(this, null);
+    padScan();
   }
 
   private void hideBars() {
@@ -107,6 +121,88 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback, Se
     }
     int i = e.getActionIndex();
     nativeTouch(e.getPointerId(i), phase, e.getX(i), e.getY(i));
+  }
+
+  /* ---- the controller ---- */
+
+  /* a real one only: a false yes takes the touch keys away, and some keyboards and docks claim
+   * the gamepad source without a stick or an A button */
+  private static boolean isPad(InputDevice d) {
+    if (d == null || d.isVirtual()) return false;
+    int src = d.getSources();
+    if ((src & InputDevice.SOURCE_GAMEPAD) != InputDevice.SOURCE_GAMEPAD
+        && (src & InputDevice.SOURCE_JOYSTICK) != InputDevice.SOURCE_JOYSTICK) return false;
+    return d.hasKeys(KeyEvent.KEYCODE_BUTTON_A)[0]
+        || (d.getMotionRange(MotionEvent.AXIS_X) != null && d.getMotionRange(MotionEvent.AXIS_Y) != null);
+  }
+
+  private void padSend() { nativePad(!padOn ? 0 : padMotors != null ? 2 : 1, padKeys | padHat, padLx, padLy, padRx, padRy, padLt, padRt); }
+
+  /* let go of everything (its key-ups never come after a disconnect or in the background) */
+  private void padClear() {
+    padKeys = padHat = 0;
+    padLx = padLy = padRx = padRy = padLt = padRt = 0;
+    padSend();
+  }
+
+  private void padScan() {
+    padOn = false;
+    padMotors = null;
+    for (int id : inputs.getInputDeviceIds()) {
+      InputDevice d = inputs.getInputDevice(id);
+      if (!isPad(d)) continue;
+      padOn = true;
+      if (padMotors == null && d.getVibrator().hasVibrator()) padMotors = d.getVibrator();
+    }
+    padClear();
+  }
+
+  @Override public void onInputDeviceAdded(int id) { padScan(); }
+  @Override public void onInputDeviceRemoved(int id) { padScan(); }
+  @Override public void onInputDeviceChanged(int id) { padScan(); }
+
+  /* app.h's PAD_* for a key, 0 none */
+  private static int padBit(int code) {
+    switch (code) {
+    case KeyEvent.KEYCODE_BUTTON_A: case KeyEvent.KEYCODE_DPAD_CENTER: return 1;
+    case KeyEvent.KEYCODE_BUTTON_B: case KeyEvent.KEYCODE_BACK: return 2;
+    case KeyEvent.KEYCODE_BUTTON_X: return 4;
+    case KeyEvent.KEYCODE_BUTTON_Y: return 8;
+    case KeyEvent.KEYCODE_BUTTON_L1: return 16;
+    case KeyEvent.KEYCODE_BUTTON_R1: return 32;
+    case KeyEvent.KEYCODE_BUTTON_L2: return 64;
+    case KeyEvent.KEYCODE_BUTTON_R2: return 128;
+    case KeyEvent.KEYCODE_BUTTON_START: return 256;
+    case KeyEvent.KEYCODE_BUTTON_SELECT: return 512;
+    case KeyEvent.KEYCODE_DPAD_LEFT: return 1024;
+    case KeyEvent.KEYCODE_DPAD_RIGHT: return 2048;
+    default: return 0;
+    }
+  }
+
+  @Override public boolean dispatchKeyEvent(KeyEvent e) {
+    int bit = padBit(e.getKeyCode());
+    if (bit == 0 || !isPad(e.getDevice())) return super.dispatchKeyEvent(e);
+    if (e.getAction() == KeyEvent.ACTION_DOWN) padKeys |= bit;
+    else if (e.getAction() == KeyEvent.ACTION_UP) padKeys &= ~bit;
+    padSend();
+    return true;
+  }
+
+  @Override public boolean dispatchGenericMotionEvent(MotionEvent e) {
+    if ((e.getSource() & InputDevice.SOURCE_JOYSTICK) != InputDevice.SOURCE_JOYSTICK
+        || e.getAction() != MotionEvent.ACTION_MOVE || !isPad(e.getDevice())) return super.dispatchGenericMotionEvent(e);
+    padLx = e.getAxisValue(MotionEvent.AXIS_X);
+    padLy = e.getAxisValue(MotionEvent.AXIS_Y);
+    padRx = e.getAxisValue(MotionEvent.AXIS_Z);
+    padRy = e.getAxisValue(MotionEvent.AXIS_RZ);
+    /* the triggers: Xbox and PlayStation pads report the first of each pair, others the second */
+    padLt = Math.max(e.getAxisValue(MotionEvent.AXIS_LTRIGGER), e.getAxisValue(MotionEvent.AXIS_BRAKE));
+    padRt = Math.max(e.getAxisValue(MotionEvent.AXIS_RTRIGGER), e.getAxisValue(MotionEvent.AXIS_GAS));
+    float hat = e.getAxisValue(MotionEvent.AXIS_HAT_X);
+    padHat = hat < -0.5f ? 1024 : hat > 0.5f ? 2048 : 0;
+    padSend();
+    return true;
   }
 
   @Override public void surfaceCreated(SurfaceHolder h) {}
@@ -142,6 +238,7 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback, Se
   @Override protected void onPause() {
     super.onPause();
     nativePause(true);
+    padClear();
     sensors.unregisterListener(this);
     if (bgm != null) bgm.pause();
     if (movie != null) movie.pause();
@@ -151,6 +248,7 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback, Se
     super.onResume();
     hideBars();
     nativePause(false);
+    padScan(); /* (one connected or gone while away) */
     if (gravity != null) sensors.registerListener(this, gravity, SensorManager.SENSOR_DELAY_GAME);
     if (bgm != null) bgm.start();
     if (movie != null) movie.start();
@@ -175,6 +273,14 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback, Se
   @Override public void onAccuracyChanged(Sensor s, int a) {}
 
   /* ---- called by the game's thread ---- */
+
+  /* a pulse of the controller's motors (amp 1..255); off this thread, a call that can wait on
+   * the system would cost the race its frame */
+  void padRumble(final int ms, final int amp) {
+    runOnUiThread(() -> {
+      if (padMotors != null) padMotors.vibrate(android.os.VibrationEffect.createOneShot(ms, amp));
+    });
+  }
 
   /* the attract movie (data dir's intro.mp4 etc.), or none for null */
   void showMovie(final String name) {
@@ -229,6 +335,7 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback, Se
         bgm = new MediaPlayer();
         bgm.setDataSource(f.getAbsolutePath());
         bgm.setLooping(true);
+        bgm.setVolume(bgmVolume, bgmVolume);
         bgm.prepare();
         bgm.start();
       } catch (Exception ex) {
@@ -237,9 +344,10 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback, Se
     });
   }
 
-  /* the BGM's level (the story ending's fade out; a new track starts at full) */
+  /* the BGM's level (the card's BGM volume, the story ending's fade out) */
   void bgmLevel(final float level) {
     runOnUiThread(() -> {
+      bgmVolume = level;
       if (bgm != null) bgm.setVolume(level, level);
     });
   }
