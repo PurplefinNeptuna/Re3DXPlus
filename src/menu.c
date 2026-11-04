@@ -8607,10 +8607,12 @@ static void step(menu_state *m) {
     }
     return;
   }
-  /* the car setting goes back to the save's cars: the car is one of them by now */
-  if (back && m->screen == MENU_SETTING && m->from < 0 && !m->save_skip && !m->new_card && m->own_sel >= 0) {
+  /* the car setting goes back to its card: the car is one of the save's by now, so the card's
+   * back is the save's cars (never MENU_SETTING's, which drops the car). Not the pre-race
+   * check's: its back, below, keeps the way to the race and clears tune_confirm */
+  if (back && m->screen == MENU_SETTING && !m->tune_confirm && m->from < 0 && !m->save_skip && !m->new_card && m->own_sel >= 0) {
     snd_menu(SND_CANCEL);
-    garage_enter(m, m->own_sel);
+    card_enter(m, MENU_GARAGE);
     return;
   }
   if (back && (m->screen == MENU_ST_LEVEL || m->screen == MENU_ST_RIVAL) && m->from < 0) {
