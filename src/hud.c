@@ -1969,7 +1969,8 @@ static void draw_ten(const car_state *car) {
   int first = ten_round > 3 ? ten_round - 3 : 0;
   for (int k = first; k <= ten_round; ++k) { /* getInfoTenClearTime: the one on the road's runs */
     anm_swap ts[8];
-    anm_draw_xf(split, k - first, 1, dx, dy, zoom, ts, ten_time_swaps(r->ten_time[k], ts));
+    /* (its last row ends where the map starts, so up with the map: hud_lift) */
+    anm_draw_xf(split, k - first, 1, dx, dy - MAP_UP / 1.6f, zoom, ts, ten_time_swaps(r->ten_time[k], ts));
   }
   draw_rival_info(car, ten_round);
 }

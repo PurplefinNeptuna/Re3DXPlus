@@ -16,7 +16,7 @@ What the out root holds:
 - data/sprite: the English picture of each name, but for the ones in keep_japanese. A swap of pictures
   misses what the English build's code draws differently: see english_hud, and storysel.py's STORYSEL_DAI.
 - data/anime: the English layouts with their sprite ids back in the Japanese table's numbering, where
-  they have the same frames and records (menu.c knows the frames) and all their sprites have numbers.
+  they have as many frames (menu.c knows the frames) and all their sprites have numbers.
 - data/cutin/jp: cutin/us's files, in UTF-8. data/movie: movie-us's, but for the opening. All else links
   to the Japanese.
 - lang.txt: the port's own Japanese literals in the tools (menupack.py's localize).
@@ -35,6 +35,10 @@ from PIL import Image
 SPRITES, SPRITES_N, SPRITE_SIZE = 0x9551560, 0x2000, 44  # clImageResourceManager's table (menupack.py)
 TITLES, TITLES_N = 0x9745580, 5200                       # youTitle::TitleTableData (titledb.py)
 NEW_SEGMENT = 0x0A000000
+# clTenStartRivalNameDisp::reset changed size in the English build, so no code pairs these tables and the
+# neighbours' distance misses them: 0x93D21C0's rivals' "vs " names are at 0x93D3FC0 there, and with its "%d
+# racer" it has no 0x93D2240 of the rounds' full-width numbers (menupack.py TEN_BANNER_*)
+TEN_NAMES, TEN_NAMES_THERE, TEN_ROUNDS, TEN_N = 0x93D21C0, 0x93D3FC0, 0x93D2240, 32
 
 # Lines written for another car than the Japanese build's rival: the English build races a Z33, an
 # RX-8 and so on where this one has the Gemballas.
@@ -46,7 +50,7 @@ CAR_FIXES = [("black Z33", "black Gemballa"), ("the 700 hp FR", "the 700 hp RR")
 TEXT_FIXES = CAR_FIXES + [("^", ",")]
 
 # the port's literals (from, to), in this order, applied by menupack.py to whatever text it renders
-LITERALS = [("級　/", " /"), ("湾岸の新人", "Wangan Beginner"), ("馬力", "HP"), ("スタートランプ", "Start Ramp"),
+LITERALS = [("人目", " racer"), ("級　/", " /"), ("湾岸の新人", "Wangan Beginner"), ("馬力", "HP"), ("スタートランプ", "Start Ramp"),
             ("装着完了！", "Installed!"), ("純正ホイールに交換完了！", "Stock wheels installed!"),
             ("個人タクシー", "Private taxi"), ("教習車", "Driving school"),
             ("箱根往路", "Hakone outbound"), ("箱根復路", "Hakone inbound"), ("御殿場", "Gotemba"),
@@ -235,6 +239,8 @@ class Mapper:
         return n
 
     def __call__(self, va):
+        if TEN_NAMES <= va < TEN_NAMES + 4 * TEN_N:
+            return va - TEN_NAMES + TEN_NAMES_THERE
         i = bisect.bisect_right(self.at, va) - 1
         if i < 0:
             return None
@@ -290,6 +296,9 @@ def patch_main(jroot, eroot, out):
                 stats["table"] += 1
             else:
                 unpaired[s[1]] = "table"
+
+    for k in range(TEN_N):
+        moves[j.off(TEN_ROUNDS + 4 * k)] = ("utf-8", str(k + 1))
 
     # the titles' own English; '/' is where a big title breaks, drawn here on one line
     for i in range(TITLES_N):
@@ -402,8 +411,12 @@ def anm_layout(d):
     return frames, base, (len(d) - base) // 64
 
 
+# The English build's title screens hold the titles' places with font 28's templates; menu.c looks for font 40's
+SHOGO_FONTS = {f"menu_f_28_{k}_font.png": f"menu_f_40_{k}_font.png" for k in (1, 2, 3)}
+
+
 def overlay_anime(jd, ed, out, sprite_id_of, english_names):
-    """the English layout where the frames and records match, its ids renumbered to the Japanese table"""
+    """the English layout where the frames match, its ids renumbered to the Japanese table"""
     os.makedirs(out)
     used, other = 0, []
     for f in os.listdir(jd):
@@ -412,14 +425,16 @@ def overlay_anime(jd, ed, out, sprite_id_of, english_names):
             os.symlink(os.path.abspath(src), os.path.join(out, f))
             continue
         dj, de = open(src, "rb").read(), bytearray(open(e, "rb").read())
-        fj, _, nj = anm_layout(dj)
+        fj, _, _ = anm_layout(dj)
         fe, base, ne = anm_layout(de)
-        ok = fj == fe and nj == ne
+        ok = len(fj) == len(fe)
         for k in range(ne if ok else 0):
             sid, = struct.unpack_from("<i", de, base + 64 * k)
             if sid < 0:
                 continue
             name = english_names.get(sid)
+            if f.startswith("menu_g_shogo_shogo_"):
+                name = SHOGO_FONTS.get(name, name)
             jid = sprite_id_of.get(name) if name else 0  # (no name: nothing to draw, as the table's first ids)
             if jid is None:
                 ok = False
@@ -461,6 +476,9 @@ def check(out):
     assert e.string(e.u32(0x93FD340))[1] == "First half The return of the devil Z", "the chapter titles' table"
     assert e.string(e.u32(TITLES + 0x1C + 0x14))[1] == "Wangan Beginner", "the titles"
     assert e.string(e.u32(SPRITES + SPRITE_SIZE * 4))[1] == "data/sprite/3d.png", "the sprite table moved"
+    assert e.string(e.u32(TEN_NAMES))[1] == "vs Akio Asakura", "the 10-in-a-row's rivals"
+    assert e.string(e.u32(TEN_NAMES + 4 * (TEN_N - 1)))[1] == "vs Akio Asakura", "the 10-in-a-row's last rival"
+    assert e.string(e.u32(TEN_ROUNDS))[1] == "1" and e.string(e.u32(TEN_ROUNDS + 4 * (TEN_N - 1)))[1] == "32", "its rounds"
     assert Image.open(f"{out}/data/sprite/cons_p_bariki_bariki.png").getbbox(), "HP/ in the atlas"
     cut = "".join(open(os.path.join(f"{out}/data/cutin/jp", f), encoding="utf-8").read()
                   for f in os.listdir(f"{out}/data/cutin/jp"))
