@@ -12,7 +12,8 @@
  * build: cc -O1 -DWMMT_EGL -DRC_FPT=double -Isrc -Isrc/phys test/menushot.c src/app.c src/anm.c
  *        src/car.c src/collide.c src/hud.c src/menu.c src/render.c src/sound.c
  *        src/phys/rc_runtime.c src/phys/phys_rc.c -lEGL -lGLESv2 -lm -lpthread
- * run:   EGL_PLATFORM=surfaceless ./a.out <data dir> <script> */
+ * run:   EGL_PLATFORM=surfaceless ./a.out <data dir> <script>
+ * WMMT_HZ=120: a display that fast, f and z counts its frames. */
 #include <EGL/egl.h>
 #include <EGL/eglext.h>
 #include <pthread.h>
@@ -57,7 +58,7 @@ static void *loader(void *arg) {
 static void step_frame(void) {
   static const char *bgm;
   static long frames;
-  app_frame(1.0f / 60.0f);
+  app_frame(1.0f / (getenv("WMMT_HZ") ? atof(getenv("WMMT_HZ")) : 60.0f));
   app_frame_done(0);
   const char *track = app_bgm();
   if (track != bgm) printf("bgm %s at frame %ld\n", track ? track : "(none)", frames);
@@ -99,6 +100,7 @@ int main(int argc, char **argv) {
   GLint depth_bits = 0;
   glGetIntegerv(GL_DEPTH_BITS, &depth_bits);
   fprintf(stderr, "EGL configs %d, depth bits %d\n", n, depth_bits);
+  if (getenv("WMMT_HZ")) app_refresh(atof(getenv("WMMT_HZ"))); /* a display this fast */
   if (app_init(argv[1], W, H, W, H) != 0) { fprintf(stderr, "init: %s\n", app_error()); return 1; }
   if (getenv("WMMT_THREAD")) {
     load_dpy = d;

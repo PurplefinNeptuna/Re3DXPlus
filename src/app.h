@@ -15,6 +15,9 @@ void app_wide(float edge, float key_k);
 void app_console(void);
 int app_init(const char *data_dir, int fb_width, int fb_height, float screen_w, float screen_h);
 void app_touch(void *id, int phase, float x, float y);
+/* The display's refresh in Hz, from any thread, as it changes (above 60 the race draws between
+ * the arcade's 60 Hz frames); 60 until told. */
+void app_refresh(float hz);
 void app_frame(float dt);
 /* The iPad's turn about the screen's normal from level (radians, clockwise as the player
  * sees it positive), for steering by tilt (the OPTION screen's GYRO); main.m each frame. */

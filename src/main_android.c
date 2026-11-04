@@ -428,6 +428,11 @@ JNIEXPORT void JNICALL JFN(nativeTilt)(JNIEnv *env, jclass cls, jfloat r) {
 
 JNIEXPORT jboolean JNICALL JFN(nativeWantsTilt)(JNIEnv *env, jclass cls) { return A.wants_tilt ? JNI_TRUE : JNI_FALSE; }
 
+JNIEXPORT void JNICALL JFN(nativeRefresh)(JNIEnv *env, jclass cls, jfloat hz) {
+  (void)env, (void)cls;
+  app_refresh(hz);
+}
+
 JNIEXPORT void JNICALL JFN(nativeMovieDone)(JNIEnv *env, jclass cls) {
   pthread_mutex_lock(&A.mx);
   A.movie_done_ev = 1;

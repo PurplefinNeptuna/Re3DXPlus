@@ -76,7 +76,7 @@ iOS 的系统代码是 Objective-C，能和 C 一起编译，所以直接放在 
 
 需要的工具：
 
-- Python 3，以及 `pip install capstone unicorn pillow`
+- Python 3，以及 `pip install capstone unicorn pillow numpy`
 - `c++filt`（binutils）
 - ffmpeg（需带 Bink 解码器，用于影片）
 - iOS：macOS + Xcode（clang）、[theos](https://theos.dev) 里打过补丁的 `iPhoneOS9.3-armv7.sdk`（放在 `~/theos/sdks/`）、`ldid`
@@ -93,7 +93,7 @@ sh tools/gen_from_original.sh --phys
 
 ## 第二步：转换素材（输出到 `data/`）
 
-以下命令都在仓库根目录运行，`<原版>` 指原版数据文件夹。
+`sh tools/convert_assets.sh` 会一次完成下面所有步骤，使用除两个之外的全部 CPU 线程（可用 `JOBS=<n>` 修改），各步骤的日志写入 `build/convert/`。如需手动运行，以下命令都在仓库根目录运行，`<原版>` 指原版数据文件夹。
 
 | 产物 | 命令 |
 |---|---|
@@ -109,7 +109,9 @@ sh tools/gen_from_original.sh --phys
 | 比赛 HUD、仪表 | `python3 tools/hudpack.py <原版>/data/sprite <原版>/main data` |
 | 小地图 | `python3 tools/navipack.py <原版>/data <原版>/main data` |
 | 菜单（动画、图片、文字） | `python3 tools/vsdiscs.py <原版>/data/sprite`，然后 `python3 tools/menupack.py <原版> data/menu.bin`（“i”说明页由 `tools/infopage.py` 用系统中文字体渲染，menupack 会自动调用） |
-| 音效、BGM、影片 | `sh prepare_sound.sh`、`sh prepare_bgm.sh`（macOS，用 afconvert）、`sh prepare_movie.sh` |
+| 其他城市的路灯 | `python3 tools/stage/pack_lights.py <原版>/data data <city> <路灯 igb> <建筑灯 igb>`（文件名见 `<city>/<time>/<time>.lua`，没有则写 `-`；参见 `tools/convert_assets.sh`） |
+| 其他城市的小地图 | `python3 tools/navipack.py <原版>/data <原版>/main data <OsNavi\|HkNavi\|NkNavi\|FkNavi>.igb navi_<city>.bin` |
+| 音效、BGM、影片 | `sh prepare_sound.sh`、`sh prepare_bgm.sh`（macOS 用 afconvert，其他系统用 ffmpeg）、`sh prepare_movie.sh` |
 
 Android 想用高清贴图时，可以用 Real-ESRGAN 放大地图贴图（`tools/upscale/mix.py`），再用 `WPK_TEX_ASTC=6 WPK_ASTCENC=<astcenc 路径>` 运行打包工具输出 ASTC 版地图（见 `tools/stage/pack.py` 开头说明），`tools/upscale/check.py` 可检查结果。
 

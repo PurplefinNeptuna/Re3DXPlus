@@ -14,7 +14,10 @@ import sys
 
 from PIL import Image, ImageDraw, ImageFont
 
-FONT = "/usr/share/fonts/opentype/urw-base35/NimbusSansNarrow-Bold.otf"
+# (urw-base35: Debian's place, then Arch's)
+FONT = next((p for p in ("/usr/share/fonts/opentype/urw-base35/NimbusSansNarrow-Bold.otf",
+                         "/usr/share/fonts/gsfonts/NimbusSansNarrow-Bold.otf") if os.path.exists(p)),
+            "NimbusSansNarrow-Bold.otf")
 DISCS = [("Bluetooth", "versus", "Race an iPad or iPhone beside you over Bluetooth."),
          ("LAN", "versus", "Race players on the same Wi-Fi network."),
          ("Server", "versus", "Race through a versus server on the internet.")]

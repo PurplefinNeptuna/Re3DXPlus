@@ -25,6 +25,7 @@ premultiplied RGBA, 1: plane is alpha, colour r g b), then n_planes of {u32 off,
 usage: pack_vinyl.py <arcade root> <out dir> [folder...]
 """
 import hashlib
+import multiprocessing
 import os
 import struct
 import sys
@@ -129,8 +130,10 @@ def main():
     root, out_dir = sys.argv[1], sys.argv[2]
     want = sys.argv[3:] or [p for p in car_packs() if os.path.exists(f"{root}/data/car/{p}/car.lua")]
     os.makedirs(out_dir, exist_ok=True)
-    for folder in want:
-        pack_car(root, folder, os.path.join(out_dir, folder + ".vpk"))
+    # one process a car (each writes only its own file), on all threads but 2 unless JOBS says
+    jobs = int(os.environ.get("JOBS") or max(1, (os.cpu_count() or 3) - 2))
+    with multiprocessing.Pool(jobs) as pool:
+        pool.starmap(pack_car, [(root, folder, os.path.join(out_dir, folder + ".vpk")) for folder in want])
 
 
 if __name__ == "__main__":

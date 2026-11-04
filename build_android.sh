@@ -15,7 +15,9 @@ NDK="$SDK/ndk/$(ls "$SDK/ndk" | sort -V | tail -1)"
 HOST=$(ls "$NDK/toolchains/llvm/prebuilt" | head -1)
 API=28
 CC="$NDK/toolchains/llvm/prebuilt/$HOST/bin/aarch64-linux-android$API-clang"
-ADB="$SDK/platform-tools/adb"
+ADB="$SDK/platform-tools/adb"; [ -x "$ADB" ] || ADB=adb
+# all threads but 2, left for the system (JOBS= overrides)
+JOBS="${JOBS:-$(( $(getconf _NPROCESSORS_ONLN) - 2 ))}"; [ "$JOBS" -ge 1 ] || JOBS=1
 OUT=build/android
 rm -rf "$OUT/apk" "$OUT/classes" && mkdir -p "$OUT/apk/lib/arm64-v8a" "$OUT/classes" "$OUT/obj"
 
@@ -30,10 +32,12 @@ if [ "$VK" = 1 ]; then
     echo "the programs to SPIR-V..."
     python3 tools/vkglsl.py table tools/vkprogs src/vkgl_spv.c
   fi
-  GFX="-DWMMT_VK src/vkgl.c src/vkgl_spv.c"
+  GFX="-DWMMT_VK"
+  GFX_SRC="src/vkgl.c src/vkgl_spv.c"
   GFX_LIBS="-lvulkan"
 else
   GFX=""
+  GFX_SRC=""
   GFX_LIBS="-lEGL -lGLESv2"
 fi
 
@@ -42,11 +46,15 @@ if [ ! -f "$OUT/obj/phys_rc.o" ] || [ src/phys/phys_rc.c -nt "$OUT/obj/phys_rc.o
   echo "compiling the arcade physics (takes a minute)..."
   $CC -O2 -fPIC -ffp-contract=off -DRC_FPT=double -w -c src/phys/phys_rc.c -o "$OUT/obj/phys_rc.o"
 fi
-$CC -O2 -fPIC -shared -std=gnu99 -Wall -Wno-unused-function -DRC_FPT=double -DWMMT_EGL $GFX \
-  -mcpu=cortex-a73 \
-  src/main_android.c src/app.c src/render.c src/hud.c src/car.c src/collide.c src/sound.c src/anm.c src/menu.c \
-  src/lights.c src/spark.c src/net.c src/vs_host.c src/title.c src/gk.c \
-  src/phys/rc_runtime.c "$OUT/obj/phys_rc.o" \
+# (xargs fails if any of the compilers does)
+SRCS="src/main_android.c src/app.c src/render.c src/hud.c src/car.c src/collide.c src/sound.c src/anm.c src/menu.c
+  src/lights.c src/spark.c src/net.c src/vs_host.c src/title.c src/gk.c src/phys/rc_runtime.c $GFX_SRC"
+# (-ffp-contract=off: car.c works on the physics' floats, and a fused multiply-add rounds differently)
+CFLAGS="-O2 -fPIC -ffp-contract=off -std=gnu99 -Wall -Wno-unused-function -DRC_FPT=double -DWMMT_EGL $GFX -mcpu=cortex-a73"
+rm -f "$OUT"/obj/game_*.o
+printf '%s\n' $SRCS | xargs -P "$JOBS" -I{} \
+  sh -c '$0 $1 -c "{}" -o "$2/game_$(basename "{}" .c).o"' "$CC" "$CFLAGS" "$OUT/obj"
+$CC -shared "$OUT"/obj/game_*.o "$OUT/obj/phys_rc.o" \
   -o "$OUT/apk/lib/arm64-v8a/libwmmt.so" \
   -landroid $GFX_LIBS -laaudio -llog -lz -lm -Wl,-z,max-page-size=16384
 
@@ -63,7 +71,13 @@ cp data/icon/Icon-76@2x.png "$OUT/res/mipmap/icon.png"
 "$BT/aapt2" link -o "$OUT/base.apk" -I "$PLAT/android.jar" --manifest android/AndroidManifest.xml \
   --min-sdk-version $API --target-sdk-version 33 --version-code 1 --version-name 1.0 "$OUT/res.zip"
 # (the library stored, not deflated, and page-aligned: it is mapped from the apk as it is)
-(cd "$OUT/apk" && zip -q ../base.apk classes.dex && zip -q -0 -r ../base.apk lib)
+python3 - "$OUT" <<'PY'
+import sys, zipfile
+out = sys.argv[1]
+with zipfile.ZipFile(out + "/base.apk", "a") as z:
+    z.write(out + "/apk/classes.dex", "classes.dex", zipfile.ZIP_DEFLATED)
+    z.write(out + "/apk/lib/arm64-v8a/libwmmt.so", "lib/arm64-v8a/libwmmt.so", zipfile.ZIP_STORED)
+PY
 "$BT/zipalign" -f -P 16 4 "$OUT/base.apk" "$OUT/aligned.apk"
 KS="$OUT/wmmt.keystore"
 [ -f "$KS" ] || "$JAVA_HOME/bin/keytool" -genkeypair -keystore "$KS" -storepass wmmtport -keypass wmmtport \
@@ -79,14 +93,16 @@ if [ "$1" = "data" ]; then
   D=/sdcard/Android/data/com.wmmt.port/files/wmmt
   "$ADB" shell mkdir -p $D
   for f in data/*.wpk data/*.wcl data/*.bin data/*.names data/*.img data/*.mp4; do
-    if [ -f "$f" ]; then "$ADB" push "$f" $D/; fi
+    if [ -f "$f" ]; then "$ADB" push --sync "$f" $D/; fi
   done
   mkdir -p data/carconfig
   cp "../Wangan Midnight Maximum Tune 3DX+ (Japan)/data/carconfig/"ytConfig*.txt data/carconfig/
+  mkdir -p data/cutin/jp
+  cp "../Wangan Midnight Maximum Tune 3DX+ (Japan)/data/cutin/jp/"*.txt data/cutin/jp/
   for d in traffic carconfig cars chara sound wheels vinyl cutin; do
-    if [ -d data/$d ]; then "$ADB" push data/$d $D/; fi
+    if [ -d data/$d ]; then "$ADB" push --sync data/$d $D/; fi
   done
   "$ADB" shell mkdir -p $D/rtmovie
-  "$ADB" push "../Wangan Midnight Maximum Tune 3DX+ (Japan)/data/rtmovie/table" "../Wangan Midnight Maximum Tune 3DX+ (Japan)/data/rtmovie/trail" $D/rtmovie/
+  "$ADB" push --sync "../Wangan Midnight Maximum Tune 3DX+ (Japan)/data/rtmovie/table" "../Wangan Midnight Maximum Tune 3DX+ (Japan)/data/rtmovie/trail" $D/rtmovie/
   echo "data pushed to $D"
 fi

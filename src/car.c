@@ -962,6 +962,9 @@ void car_update(car_state *c, const car_input *in) {
   }
 #endif
   WF(P.gin + 4, in->throttle);
+#ifdef WMMT_EGL
+  if (getenv("WMMT_PILOT")) WF(P.gin + 4, 1.0f);
+#endif
   WF(P.gin + 8, in->brake);
   W32(P.gin + 0x14, P.manual ? (uint32_t)P.lever : 0xffffffffu);
   /* the arcade frame: the traffic's AI and life, the car, what everything hit, the

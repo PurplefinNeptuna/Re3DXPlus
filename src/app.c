@@ -262,6 +262,11 @@ static struct {
   double present_ms; /* the last frame's wait in presentRenderbuffer (app_frame_done) */
   double seg[8];     /* the race frame's render, by part (perf_frame) */
   int race_frames; /* frames since the race started */
+  /* a display faster than the arcade's 60 Hz (app_refresh): race_ticks' count, the two latest
+   * ticks' cars and the real one under the blended picture (car_blend) */
+  float vsync_err, snd_dt;
+  int tick_acc, prev_ok, blended;
+  car_state car_prev, car_real;
   /* the overhead reflection (render_overhead, not the arcade's): off for a test
    * (WMMT_NO_OVERHEAD); this frame's map drawn for the player's car, its batches and ms */
   int no_over, over_drawn, over_draws, over_tris;
@@ -433,18 +438,23 @@ enum { SEG_SKY, SEG_OPAQUE, SEG_CUTOUT, SEG_BLEND, SEG_LIGHTS, SEG_WARM, SEG_BLU
 /* A line for each frame that missed its vsync or ran slow, and a summary every 10 s. The
  * slow ones say where the render's time went and how long the frame before waited for the
  * GPU in presentRenderbuffer. */
+/* The display's refresh in Hz (app_refresh). At 60 or less a frame is as many arcade frames as
+ * vsyncs went by, as ever. */
+static volatile int display_hz = 60;
+
 static void perf_frame(float dt, int steps, double phys, double render, int warmed, const render_params *rp) {
   G.race_time += dt;
   if (phys > G.max_phys) G.max_phys = phys;
   if (render > G.max_render) G.max_render = render;
-  if (steps != 1) G.odd_steps++;
-  int slow = dt > 1.5f / 60.0f || phys + render > 12.0;
+  int hz = display_hz > 60 ? display_hz : 60;
+  if (hz > 60 ? steps > 1 : steps != 1) G.odd_steps++;
+  int slow = dt > 1.5f / (float)hz || phys + render > 720.0 / hz;
   if (slow) G.slow_frames++;
   /* 1080p at 60 before any effect (Allan's): over 3 of 120 frames missing their vsync (a
    * chunk's first draw aside) gives up the next of render_hq's costs; 1200 frames without a
    * miss take one back, unless the level above missed again soon after its last return */
-  if (G.console) {
-    G.gov_slow += dt > 1.25f / 60.0f && !rp->new_chunks && !warmed;
+  if (G.console && !getenv("WMMT_HQ_LEVEL")) { /* (test: that level, held, to measure it) */
+    G.gov_slow += dt > 1.25f / (float)hz && !rp->new_chunks && !warmed;
     if (G.gov_since_up) G.gov_since_up++; /* (0: never went up) */
     int window = G.gov_slow ? 120 : 1200, level = G.gov_level;
     if (++G.gov_frames >= window) {
@@ -3929,9 +3939,82 @@ static void eye_in(const mat4 *m, const float *p, float *out) {
   for (int j = 0; j < 3; ++j) out[j] = r[0] * m->m[4 * j] + r[1] * m->m[4 * j + 1] + r[2] * m->m[4 * j + 2];
 }
 
+void app_refresh(float hz) {
+  display_hz = hz > 1.0f ? (int)(hz + 0.5f) : 60;
+}
+
+/* How many arcade frames (always 60 Hz: car_update is exactly one) are due this display frame.
+ * Above 60 Hz: the vsyncs by dt, keeping what rounding left over so that jitter neither gains
+ * nor loses time, then 60 ticks to display_hz vsyncs; a frame with none only draws again. */
+static int race_ticks(float dt) {
+  int hz = display_hz;
+  if (hz <= 60 || G.race_frames < 2) {
+    /* the first frames' dt holds the race start and its first draw, not driving time */
+    int steps = (int)(dt * 60.0f + 0.5f);
+    G.vsync_err = 0, G.tick_acc = 0;
+    return steps < 1 || G.race_frames < 2 ? 1 : steps;
+  }
+  G.vsync_err += dt * (float)hz;
+  int vsyncs = (int)(G.vsync_err + 0.5f);
+  G.vsync_err -= (float)vsyncs;
+  G.tick_acc += vsyncs * 60;
+  int ticks = G.tick_acc / hz;
+  G.tick_acc %= hz;
+  return ticks;
+}
+
+/* One matrix between two ticks' (a rigid motion over 1/60 s turns little enough for a straight
+ * line to hold). Not across a jump: a new race, a reset, a rival moved out of reach, a camera
+ * cut, where the two poses have nothing to do with each other. */
+#define BLEND_JUMP 150.0f /* 15 m in 1/60 s: 3240 km/h */
+
+static int turned_little(const float *p, const float *c) {
+  return p[0] * c[0] + p[1] * c[1] + p[2] * c[2] > 0.9f && p[8] * c[8] + p[9] * c[9] + p[10] * c[10] > 0.9f;
+}
+
+static float apart2(const float *p, const float *c) {
+  float x = c[0] - p[0], y = c[1] - p[1], z = c[2] - p[2];
+  return x * x + y * y + z * z;
+}
+
+static void blend16(float *c, const float *p, float t) {
+  for (int i = 0; i < 16; ++i) c[i] = p[i] + (c[i] - p[i]) * t;
+}
+
+static void blend_body(float *c, const float *p, float t) {
+  if (apart2(p + 12, c + 12) < BLEND_JUMP * BLEND_JUMP && turned_little(p, c)) blend16(c, p, t);
+}
+
+/* The pictured poses t of the way from the tick before to the latest. The wheels stay the latest
+ * tick's: they are relative to the car, and their spin (4 radians a tick at speed) is no line. */
+static void car_blend(car_state *c, const car_state *p, float t) {
+  blend_body(c->body, p->body, t);
+  if (apart2(p->pos, c->pos) < BLEND_JUMP * BLEND_JUMP)
+    for (int i = 0; i < 3; ++i) c->pos[i] = p->pos[i] + (c->pos[i] - p->pos[i]) * t;
+  /* (a view's translation is no place in the world, so the camera's own says if it jumped) */
+  if (apart2(p->cam_pos, c->cam_pos) < BLEND_JUMP * BLEND_JUMP && turned_little(p->cam_view, c->cam_view)) {
+    blend16(c->cam_view, p->cam_view, t);
+    for (int i = 0; i < 3; ++i) c->cam_pos[i] = p->cam_pos[i] + (c->cam_pos[i] - p->cam_pos[i]) * t;
+  }
+  if (turned_little(p->mirror_view, c->mirror_view)) blend16(c->mirror_view, p->mirror_view, t);
+  for (int i = 0; i < CAR_RIVALS; ++i)
+    if (c->rival_shown[i] && p->rival_shown[i]) blend_body(c->rival_body[i], p->rival_body[i], t);
+  /* the traffic's list closes up as cars come and go: each its nearest of the same model before */
+  for (int i = 0; i < c->n_traffic; ++i) {
+    const float *best = NULL;
+    float best_d = BLEND_JUMP * BLEND_JUMP;
+    for (int j = 0; j < p->n_traffic; ++j) {
+      float d = apart2(p->traffic[j].body + 12, c->traffic[i].body + 12);
+      if (p->traffic[j].model == c->traffic[i].model && d < best_d) best = p->traffic[j].body, best_d = d;
+    }
+    if (best) blend_body(c->traffic[i].body, best, t);
+  }
+}
+
 void app_frame(float dt) {
   double frame_start = now_ms();
   G.frame_start = frame_start;
+  if (G.blended) G.car = G.car_real, G.blended = 0; /* what the race goes on from */
   anm_trim();
   if (dt > 0.1f) dt = 0.1f;
   if (dt > 0) G.fps += (1.0f / dt - G.fps) * 0.05f;
@@ -4044,10 +4127,12 @@ void app_frame(float dt) {
     return;
   }
 
-  /* input and simulation (the arcade's fixed 60 Hz frames) */
-  car_input in;
+  /* input and simulation (the arcade's fixed 60 Hz frames). The input once a tick: its presses
+   * wait for one, and letting go of the wheel turns it back by the tick */
+  static car_input in;
+  int ticks = race_ticks(dt);
   hud_options();
-  hud_input(&G.hud, &in);
+  if (ticks) hud_input(&G.hud, &in);
   if (G.hud.camera_pressed) {
     G.camera ^= 1;
     car_view(G.camera ? CAR_VIEW_ROOF : CAR_VIEW_BEHIND);
@@ -4067,13 +4152,12 @@ void app_frame(float dt) {
     garage_save();
     G.hud.trans_pressed = 0;
   }
-  /* One arcade frame per display frame: dt comes from vsync-aligned timestamps, so
-   * rounding it counts the vsyncs that went by. (An accumulator drifting around 1/60 s now
-   * and then ran no step one frame and two the next, a visible hitch.) */
+  /* race_ticks: at 60 Hz one arcade frame per display frame: dt comes from vsync-aligned
+   * timestamps, so rounding it counts the vsyncs that went by. (An accumulator drifting around
+   * 1/60 s now and then ran no step one frame and two the next, a visible hitch.) */
   double t0 = now_ms();
-  int steps = (int)(dt * 60.0f + 0.5f);
-  /* the first frames' dt holds the race start and its first draw, not driving time */
-  if (steps < 1 || G.race_frames < 2) steps = 1;
+  int steps = ticks;
+  if (steps) G.prev_ok = 0; /* (a tick that moved nothing leaves nothing to blend from) */
   if (G.paused && !G.vs_race) steps = 0; /* a versus runs on with the others under it */
   if (G.period_in > 0) G.period_in -= steps;
   if (movie) { /* clRaceThread::race: the movie's frames, then the race */
@@ -4084,7 +4168,10 @@ void app_frame(float dt) {
       if (ending && G.movie_frame + 1.0f >= G.movie_len) break; /* (held at its last frame) */
       G.movie_frame += 1.0f;
       if (G.movie_frame >= G.movie_len) movie_close();
-      else car_movie_update(&G.car, G.movie_frame);
+      else {
+        G.car_prev = G.car, G.prev_ok = 1;
+        car_movie_update(&G.car, G.movie_frame);
+      }
     }
     steps = 0;
   } else if (G.movie_in > 0) {
@@ -4099,6 +4186,7 @@ void app_frame(float dt) {
   }
   for (int i = 0; i < steps; ++i) {
     if (G.ten_white && ++G.ten_white > 1 + TEN_WHITE_HOLD + TEN_WHITE_FADE) G.ten_white = 0;
+    G.car_prev = G.car, G.prev_ok = 1;
     car_update(&G.car, &in);
     in.shift_up = in.shift_down = 0;
     /* clCarEffectManager::update's sparks, each car's */
@@ -4122,7 +4210,11 @@ void app_frame(float dt) {
     }
     if (G.car.race.play_state != 9) G.ten_beaten_on = 0;
   }
-  if (!G.paused && !frozen && !movie) snd_update(&G.car, &in, dt);
+  if (!G.paused && !frozen && !movie) {
+    /* (once a tick as at 60 Hz, with all the time since) */
+    G.snd_dt += dt;
+    if (steps) snd_update(&G.car, &in, G.snd_dt), G.snd_dt = 0;
+  }
   /* the time attack console's sounds: TIME EXTEND at a checkpoint, the last seconds' ticks */
   car_race *race = &G.car.race;
   /* the 10-in-a-row's rival of the round */
@@ -4247,6 +4339,17 @@ void app_frame(float dt) {
   }
   double t1 = now_ms();
 
+  /* Faster than 60 Hz: the picture half a display frame behind the latest tick, so that each
+   * display frame shows a place of its own between two ticks (the race itself never sees it) */
+  if (display_hz > 60 && G.prev_ok && !G.paused && !frozen) {
+    float t = (float)G.tick_acc / (float)display_hz + 60.0f / (float)display_hz;
+    if (t < 1.0f) {
+      G.car_real = G.car;
+      car_blend(&G.car, &G.car_prev, t);
+      G.blended = 1;
+    }
+  }
+
   /* the overhead map for the player's car first, before anything goes to the frame's own
    * target (a tile renderer would store the frame and load it again to come back to it) */
   {
@@ -4271,7 +4374,7 @@ void app_frame(float dt) {
 
   /* render: into the radial blur's texture while the camera asks for it (or the sharpening) */
   int sharp = G.menu.sharp_on && !G.no_sharp;
-  if (sharp && dt > 1.5f / 60.0f && G.race_frames > 2) G.sharp_rest = SHARP_REST;
+  if (sharp && dt > 1.5f / (float)(display_hz > 60 ? display_hz : 60) && G.race_frames > 2) G.sharp_rest = SHARP_REST;
   else if (G.sharp_rest > 0) G.sharp_rest--;
   if (sharp && G.sharp_rest > 0) G.sharp_rested++;
   render_sharpen(sharp && !G.sharp_rest ? SHARP_AMOUNT : 0.0f, sharp);
@@ -4470,7 +4573,8 @@ void app_frame(float dt) {
    * a GPU behind leaves at two vsyncs with little CPU), how long the GPU takes over its part
    * (glFinish waits for all of it): is the race short of CPU or of GPU? */
   static int gpu_sampled = -1000;
-  if (G.perf && (now_ms() - t1 > 10.0 || dt > 1.5f / 60.0f) && G.race_frames - gpu_sampled >= 300) {
+  /* (under WMMT_HQ_LEVEL every 300 frames, not only slow ones: a measurement, not a diagnosis) */
+  if (G.perf && (getenv("WMMT_HQ_LEVEL") || now_ms() - t1 > 600.0 / (display_hz > 60 ? display_hz : 60) || dt > 1.5f / (float)(display_hz > 60 ? display_hz : 60)) && G.race_frames - gpu_sampled >= 300) {
     gpu_sampled = G.race_frames;
     double g0 = now_ms();
     glFinish();

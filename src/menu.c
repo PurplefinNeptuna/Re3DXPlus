@@ -1677,11 +1677,12 @@ static void draw_setting(const menu_state *m, int clock, void (*draw3d)(void *),
   int grade = car_tune_grade(power, handling);
   for (int k = 0; k < 5; ++k)
     anm_draw_sprite(anm_sprite(SET_BADGE[k][k == grade]), SET_BADGE_X + SET_BADGE_DX * (float)k - 64.0f, 347.5f - 32.0f, 1);
-  anm_swap title = { anm_sprite(T_TOPBAR_MES), anm_sprite(T_SET_TITLE) };
+  /* (the tune check draws its own title and DONE over this screen: draw_tune_confirm) */
+  anm_swap title = { anm_sprite(T_TOPBAR_MES), m->tune_confirm ? -1 : anm_sprite(T_SET_TITLE) };
   draw_topbar(bars, 1, &title);
   anm_draw(ID.bottom, bars, 1);
   int hint = anm_sprite(SET_TEXT + 4);
-  if (!bars) anm_draw_sprite(hint, 320.0f - anm_sprite_width(hint) * 0.5f, 427.0f, 0.75f + 0.25f * cosf((float)clock * 0.1f));
+  if (!bars && !m->tune_confirm) anm_draw_sprite(hint, 320.0f - anm_sprite_width(hint) * 0.5f, 427.0f, 0.75f + 0.25f * cosf((float)clock * 0.1f));
 }
 
 /* The setting's sprites (the wheel prompt's too), kept up from the colour select on and

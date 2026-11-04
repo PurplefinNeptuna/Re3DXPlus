@@ -7,8 +7,10 @@
 # Needs an ffmpeg with the Bink decoder.
 set -e
 cd "$(dirname "$0")"
+# all threads but 2, left for the system (JOBS= overrides)
+JOBS="${JOBS:-$(( $(getconf _NPROCESSORS_ONLN) - 2 ))}"; [ "$JOBS" -ge 1 ] || JOBS=1
 SRC="../Wangan Midnight Maximum Tune 3DX+ (Japan)/data"
-ENC="-c:v libx264 -profile:v main -level 3.1 -pix_fmt yuv420p -preset slow -crf 20 -c:a aac -b:a 128k -ar 44100 -movflags +faststart"
+ENC="-threads $JOBS -c:v libx264 -profile:v main -level 3.1 -pix_fmt yuv420p -preset slow -crf 20 -c:a aac -b:a 128k -ar 44100 -movflags +faststart"
 
 # atruct.bik + opening theme -> intro.mp4 (59.5 s)
 [ -f data/intro.mp4 ] || ffmpeg -y -v error -i "$SRC/movie/atruct.bik" -i "$SRC/sound/bgm/attract/opening_japan.wav" \

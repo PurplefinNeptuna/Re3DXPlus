@@ -5,11 +5,13 @@ import android.hardware.Sensor;
 import android.hardware.SensorEvent;
 import android.hardware.SensorEventListener;
 import android.hardware.SensorManager;
+import android.hardware.display.DisplayManager;
 import android.media.MediaPlayer;
 import android.os.Bundle;
 import android.view.MotionEvent;
 import android.view.Surface;
 import android.view.SurfaceHolder;
+import android.view.Display;
 import android.view.SurfaceView;
 import android.view.View;
 import android.view.WindowManager;
@@ -22,7 +24,7 @@ import java.io.File;
  * from its own thread (src/main_android.c), the attract movies play in a VideoView over it,
  * the BGM in a MediaPlayer (both decode the AAC/H.264 in hardware); touches, the gravity for
  * steering by tilt and the lifecycle go down to the native side. */
-public class MainActivity extends Activity implements SurfaceHolder.Callback, SensorEventListener {
+public class MainActivity extends Activity implements SurfaceHolder.Callback, SensorEventListener, DisplayManager.DisplayListener {
   static { System.loadLibrary("wmmt"); }
 
   static native void nativeStart(MainActivity a, String dataDir, String saveDir);
@@ -32,6 +34,7 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback, Se
   static native void nativeTilt(float radians);
   static native boolean nativeWantsTilt();
   static native void nativeMovieDone();
+  static native void nativeRefresh(float hz);
   static native void nativePressStart();
   static native void nativeMemoryWarning();
 
@@ -63,7 +66,19 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback, Se
     dataDir = data.getAbsolutePath();
     sensors = (SensorManager) getSystemService(SENSOR_SERVICE);
     gravity = sensors.getDefaultSensor(Sensor.TYPE_GRAVITY);
+    /* test settings, as a desktop run has them in its environment:
+     * am start -n com.wmmt.port/.MainActivity --es env "WMMT_HQ_LEVEL=3;WMMT_PILOT=1"
+     * (only WMMT_ names: the activity is open to any app on the phone) */
+    String env = getIntent().getStringExtra("env");
+    if (env != null) for (String kv : env.split(";")) {
+      int eq = kv.indexOf('=');
+      if (eq > 0 && kv.startsWith("WMMT_")) {
+        try { android.system.Os.setenv(kv.substring(0, eq), kv.substring(eq + 1), true); }
+        catch (android.system.ErrnoException e) { /* the run just goes on without it */ }
+      }
+    }
     nativeStart(this, dataDir, dataDir);
+    ((DisplayManager) getSystemService(DISPLAY_SERVICE)).registerDisplayListener(this, null);
   }
 
   private void hideBars() {
@@ -95,7 +110,33 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback, Se
   }
 
   @Override public void surfaceCreated(SurfaceHolder h) {}
-  @Override public void surfaceChanged(SurfaceHolder h, int fmt, int w, int ht) { nativeSurface(h.getSurface(), w, ht); }
+  /* the fastest refresh the display has at this size (the race draws between the arcade's 60 Hz
+   * frames), and the native side told what it really runs at: battery saver and the system's
+   * motion smoothness setting can hold it at 60 */
+  private void askFastest(Surface s) {
+    Display d = getWindowManager().getDefaultDisplay();
+    Display.Mode now = d.getMode(), best = now;
+    for (Display.Mode m : d.getSupportedModes())
+      if (m.getPhysicalWidth() == now.getPhysicalWidth() && m.getPhysicalHeight() == now.getPhysicalHeight()
+          && m.getRefreshRate() > best.getRefreshRate()) best = m;
+    WindowManager.LayoutParams a = getWindow().getAttributes();
+    if (a.preferredDisplayModeId != best.getModeId()) {
+      a.preferredDisplayModeId = best.getModeId();
+      getWindow().setAttributes(a);
+    }
+    if (s != null && android.os.Build.VERSION.SDK_INT >= 30)
+      s.setFrameRate(best.getRefreshRate(), Surface.FRAME_RATE_COMPATIBILITY_FIXED_SOURCE);
+    nativeRefresh(d.getRefreshRate());
+  }
+
+  @Override public void onDisplayAdded(int id) {}
+  @Override public void onDisplayRemoved(int id) {}
+  @Override public void onDisplayChanged(int id) { nativeRefresh(getWindowManager().getDefaultDisplay().getRefreshRate()); }
+
+  @Override public void surfaceChanged(SurfaceHolder h, int fmt, int w, int ht) {
+    askFastest(h.getSurface());
+    nativeSurface(h.getSurface(), w, ht);
+  }
   @Override public void surfaceDestroyed(SurfaceHolder h) { nativeSurface(null, 0, 0); }
 
   @Override protected void onPause() {

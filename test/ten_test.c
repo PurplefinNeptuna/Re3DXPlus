@@ -17,7 +17,7 @@ int main(int argc, char **argv) {
   if (car_init(argv[1], err, sizeof err)) { puts(err); return 1; }
   int pack = atoi(argv[4]);
   car_rival r = { (unsigned)atoi(argv[3]), { 0 }, (int)CARDB_TYRES[pack][6], atoi(argv[5]), atoi(argv[6]),
-                 getenv("SERIES") ? atoi(getenv("SERIES")) : 0 };
+                 0, getenv("SERIES") ? atoi(getenv("SERIES")) : 0 };
   for (int i = 0; i < 6; ++i) r.tyres[i] = CARDB_TYRES[pack][i];
   car_spec me = CAR_SPEC_FD3S;
   if (getenv("SAME")) { /* the tyres tools/recomp/seq.py gives both cars, to compare with it */

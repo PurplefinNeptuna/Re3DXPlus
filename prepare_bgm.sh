@@ -7,6 +7,23 @@ set -e
 cd "$(dirname "$0")"
 SRC="../Wangan Midnight Maximum Tune 3DX+ (Japan)/data/sound/bgm"
 mkdir -p data/sound/bgm
+# all threads but 2, left for the system (JOBS= overrides)
+JOBS="${JOBS:-$(( $(getconf _NPROCESSORS_ONLN) - 2 ))}"; [ "$JOBS" -ge 1 ] || JOBS=1
+export SRC
+encode() {
+  f=$1
+  out="data/sound/bgm/$(basename "$f").m4a"
+  [ -f "$out" ] && return 0
+  # into a temporary name first, so a stopped run leaves no half-written track behind
+  if command -v afconvert >/dev/null 2>&1; then
+    afconvert -f m4af -d aac -b 128000 "$SRC/$f.wav" "$out.part"
+  else
+    ffmpeg -y -v error -i "$SRC/$f.wav" -c:a aac -b:a 128k -f ipod "$out.part"
+  fi
+  mv "$out.part" "$out"
+}
+# (sh -c cannot see this shell's function, so this script runs itself per track)
+if [ "$1" = "--one" ]; then encode "$2"; exit; fi
 for f in maxi3plus/wm3DX_P_sys_01_ent maxi3plus/wm3DX_P_sys_02_sel maxi3/sys_04 maxi3/sys_05 \
          maxi3plus/wm3DX_P_race_01 maxi3plus/wm3DX_P_race_02 maxi3plus/wm3DX_P_race_03 maxi3plus/wm3DX_P_race_04 \
          maxi3dx/wm3DX_race_01_mainD \
@@ -17,11 +34,7 @@ for f in maxi3plus/wm3DX_P_sys_01_ent maxi3plus/wm3DX_P_sys_02_sel maxi3/sys_04 
          maxi2/wm2_12 maxi2/wm2_13 maxi2/wm2_14 maxi2/wm2_15 maxi2/wm2_16 maxi2/wm2_17 maxi2/wm2_19 maxi2/wm2_20 \
          maxi2/wm2_21 maxi2/wm2_22 maxi2/wm2_23 \
          r/wmr_01 r/wmr_02 r/wmr_03 r/wmr_04 r/wmr_05 r/wmr_06 r/wmr_07 r/wmr_08 r/wmr_09 r/wmr_10 r/wmr_11 r/wmr_12; do
-  out="data/sound/bgm/$(basename "$f").m4a"
-  [ -f "$out" ] && continue
-  # into a temporary name first, so a stopped run leaves no half-written track behind
-  afconvert -f m4af -d aac -b 128000 "$SRC/$f.wav" "$out.part"
-  mv "$out.part" "$out"
-done
+  echo "$f"
+done | xargs -P "$JOBS" -n 1 sh "$(basename "$0")" --one
 chmod 644 data/sound/bgm/*.m4a
 ls -l data/sound/bgm

@@ -22,6 +22,8 @@ import os
 import struct
 import sys
 import zlib
+import functools
+from multiprocessing.pool import ThreadPool
 
 import math
 
@@ -849,6 +851,12 @@ def sprite_names(elf):
     return names
 
 
+@functools.lru_cache(maxsize=None)
+def font_sheet(path):
+    """a font's page, decoded once: the text's thousands of glyphs were most of this tool's time"""
+    return Image.open(path).convert("RGBA")
+
+
 def render_text(elf, names, root, font, text):
     """clSpriteFont::draw: glyph g of a font is cell g % cells of page sprite g // cells;
     the advance is the half or full width (chars above 0x7f)."""
@@ -861,7 +869,7 @@ def render_text(elf, names, root, font, text):
         ch = ord(c)
         page = elf.i16s(glyph_map + 2 * (ch >> 5), 1)[0]
         g = elf.i16s(glyph_map + 0x1000 + 64 * page + 2 * (ch & 31), 1)[0]
-        sheet = Image.open(f"{root}/{names[elf.u32(pages + 4 * (g // cells))]}").convert("RGBA")
+        sheet = font_sheet(f"{root}/{names[elf.u32(pages + 4 * (g // cells))]}")
         k = g % cells
         glyph = sheet.crop(((k % cols) * cell, (k // cols) * cell, (k % cols + 1) * cell, (k // cols + 1) * cell))
         out.alpha_composite(glyph, (x, 0))
@@ -1113,10 +1121,11 @@ def main():
 
     with open(out, "wb") as f:
         f.write(b"WMN3" + struct.pack("<I", len(sprites)))
-        for sid, im in zip(ids, sprites):
-            px = im.tobytes()
-            z = zlib.compress(px, 9) if sid in ZIPPED else b""
-            f.write(struct.pack("<iHHI", sid, *im.size, len(z)) + (z or px))
+        # (zlib lets go of the GIL, so threads do share this; all but 2 of them unless JOBS says)
+        with ThreadPool(int(os.environ.get("JOBS") or max(1, (os.cpu_count() or 3) - 2))) as pool:
+            packed_px = pool.imap(lambda s: zlib.compress(s[1].tobytes(), 9) if s[0] in ZIPPED else b"", zip(ids, sprites))
+            for sid, im, z in zip(ids, sprites, packed_px):
+                f.write(struct.pack("<iHHI", sid, *im.size, len(z)) + (z or im.tobytes()))
         f.write(struct.pack("<I", len(anims)))
         for name, frames, nrec, packed in anims:
             f.write(name.encode().ljust(48, b"\0") + struct.pack("<II", len(frames), nrec))

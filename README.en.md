@@ -78,7 +78,7 @@ some folder/
 
 Tools you need:
 
-- Python 3 with `pip install capstone unicorn pillow`
+- Python 3 with `pip install capstone unicorn pillow numpy`
 - `c++filt` (binutils)
 - ffmpeg with the Bink decoder (for the movies)
 - iOS: macOS + Xcode (clang), a patched `iPhoneOS9.3-armv7.sdk` from [theos](https://theos.dev) (in `~/theos/sdks/`), and `ldid`
@@ -95,7 +95,7 @@ This runs the original executable's own lookup functions (under the unicorn emul
 
 ## Step 2: convert the assets (into `data/`)
 
-Run these from the repository root. `<orig>` is the original data folder.
+`sh tools/convert_assets.sh` does all of the below in one go, using all CPU threads but two (`JOBS=<n>` to change that), and writes each step's log to `build/convert/`. To run the steps by hand, run these from the repository root. `<orig>` is the original data folder.
 
 | Output | Command |
 |---|---|
@@ -111,7 +111,9 @@ Run these from the repository root. `<orig>` is the original data folder.
 | Race HUD and meters | `python3 tools/hudpack.py <orig>/data/sprite <orig>/main data` |
 | Minimap | `python3 tools/navipack.py <orig>/data <orig>/main data` |
 | Menus (animations, pictures, text) | `python3 tools/vsdiscs.py <orig>/data/sprite`, then `python3 tools/menupack.py <orig> data/menu.bin` (the "i" info page is rendered by `tools/infopage.py` with a system CJK font; menupack calls it) |
-| Sound effects, BGM, movies | `sh prepare_sound.sh`, `sh prepare_bgm.sh` (macOS, uses afconvert), `sh prepare_movie.sh` |
+| Other cities' street lights | `python3 tools/stage/pack_lights.py <orig>/data data <city> <street igb> <building igb>` (the files `<city>/<time>/<time>.lua` names, `-` for none; see `tools/convert_assets.sh`) |
+| Other cities' minimaps | `python3 tools/navipack.py <orig>/data <orig>/main data <OsNavi\|HkNavi\|NkNavi\|FkNavi>.igb navi_<city>.bin` |
+| Sound effects, BGM, movies | `sh prepare_sound.sh`, `sh prepare_bgm.sh` (afconvert on macOS, otherwise ffmpeg), `sh prepare_movie.sh` |
 
 For HD textures on Android, upscale the map textures with Real-ESRGAN (`tools/upscale/mix.py`), then run the packers with `WPK_TEX_ASTC=6 WPK_ASTCENC=<path to astcenc>` to write ASTC maps (see the notes at the top of `tools/stage/pack.py`). `tools/upscale/check.py` checks the result.
 

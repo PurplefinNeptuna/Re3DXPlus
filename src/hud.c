@@ -2294,8 +2294,9 @@ void hud_draw(const hud_state *h, const car_state *car, const car_input *in, flo
     /* and clear of the top keys wherever the KEY LAYOUT put them: under them if they cover it */
     rect top = key(group_rect(KEY_TOP, h->gyro), KEY_TOP);
     float fx = 16 - EDGE, fy = 16;
-    if (fx < top.x + top.w + 4 && fx + 2 * 12 * 1.35f > top.x - 4 && fy < top.y + top.h + 4) fy = top.y + top.h + 8;
-    number((int)(fps + 0.5f), 2, fx, fy, 12, 20);
+    int digits = fps >= 99.5f ? 3 : 2; /* (a 120 Hz display's) */
+    if (fx < top.x + top.w + 4 && fx + (float)digits * 12 * 1.35f > top.x - 4 && fy < top.y + top.h + 4) fy = top.y + top.h + 8;
+    number((int)(fps + 0.5f), digits, fx, fy, 12, 20);
   }
 
   if (tex_prog) {

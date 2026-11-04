@@ -1,0 +1,44 @@
+# Arcade data and anything derived from it must never be committed (see README, "No original content").
+data/
+build/
+a.out
+bake_ao
+__pycache__/
+
+# tools/gen_from_original.sh --phys
+src/phys/phys_rc.c
+src/backfiredb.h
+src/battle.h
+src/cardb.h
+src/carwheel.h
+src/dressdb.h
+src/meterdb.h
+src/minicourse.h
+src/namedb.h
+src/neondb.h
+src/rivaldb.h
+src/sounddb.h
+src/sparkdb.h
+src/steff.h
+src/storybgm.h
+src/storycity.h
+src/storycut.h
+src/storydemo.h
+src/storyinfo.h
+src/storymovie.h
+src/storypre.h
+src/storysel.h
+src/sttune.h
+src/tendb.h
+src/tenline.h
+src/titledb.h
+tools/*.json
+tools/*_texts.txt
+tools/uvtab.txt
+tools/stage/barricades.txt
+
+# tools/vsdiscs.py (made from the arcade's sprites)
+tools/vsdisc/
+
+# build_android.sh
+src/vkgl_spv.c
