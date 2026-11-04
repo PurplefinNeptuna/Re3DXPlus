@@ -318,10 +318,7 @@ static void *game(void *arg) {
       away = 0;
     }
     if (warn) app_memory_warning();
-    if (done) {
-      A.movie = -1;
-      app_movie_done();
-    }
+    if (done) app_movie_done(); /* (sync_movie below then takes the finished movie's view down) */
     if (press) app_press_start();
     for (int i = 0; i < nt; ++i)
       app_touch((void *)(intptr_t)(tv[i].id + 1), tv[i].phase, tv[i].x * A.touch_k - A.touch_edge, tv[i].y * A.touch_k);

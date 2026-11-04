@@ -98,7 +98,7 @@ if [ "$1" = "data" ]; then
   mkdir -p data/carconfig
   cp "../Wangan Midnight Maximum Tune 3DX+ (Japan)/data/carconfig/"ytConfig*.txt data/carconfig/
   mkdir -p data/cutin/jp
-  cp "../Wangan Midnight Maximum Tune 3DX+ (Japan)/data/cutin/jp/"*.txt data/cutin/jp/
+  cp -n "../Wangan Midnight Maximum Tune 3DX+ (Japan)/data/cutin/jp/"*.txt data/cutin/jp/  # (-n: tools/convert_en.sh's English stays)
   for d in traffic carconfig cars chara sound wheels vinyl cutin; do
     if [ -d data/$d ]; then "$ADB" push --sync data/$d $D/; fi
   done

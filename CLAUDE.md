@@ -2,7 +2,7 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-Re3DX+ is an unofficial native port of the arcade game *Wangan Midnight Maximum Tune 3DX+* to iOS 6 (iPad 3, iPhone 4) and Android (arm64). The arcade's physics and race logic are statically recompiled from its i386 executable to C; everything else is rewritten from reverse engineering. `README.en.md` has the full asset-conversion table.
+Re3DX+ is an unofficial native port of the arcade game *Wangan Midnight Maximum Tune 3DX+* to iOS 6 (iPad 3, iPhone 4) and Android (arm64). The arcade's physics and race logic are statically recompiled from its i386 executable to C; everything else is rewritten from reverse engineering. `README.md` has the full asset-conversion table.
 
 ## No original content in git
 
@@ -19,7 +19,7 @@ The original data is expected next to the repo, as `../Wangan Midnight Maximum T
 sh tools/gen_from_original.sh --phys          # optional first arg: path to the original
 sh tools/recomp/build_phys.sh <path/to/main>  # physics only
 
-# 2. Assets into data/, on all threads but 2 (JOBS=<n> overrides; README.en.md's table lists the steps)
+# 2. Assets into data/, on all threads but 2 (JOBS=<n> overrides; README.md's table lists the steps)
 sh tools/convert_assets.sh                    # optional first arg: path to the original
 
 # Android (no Gradle). Defaults assume macOS, so set ANDROID_HOME and JAVA_HOME on Linux
@@ -34,7 +34,14 @@ PHONE=1 ./build.sh ipa       # iPhone 4
 ./build.sh deploy            # jailbroken iPad over the ssh host alias `ipad`
 
 python3 tools/vs_server.py [port]   # online versus server, UDP 27015 by default
+
+# Optional English text, after steps 1 and 2 (the Japanese build's cars and physics; needs an English
+# 3DX+'s main and data/{sprite-us,anime-us,movie-us,cutin} beside the repo: README.md)
+sh tools/convert_en.sh             # then rebuild the app; --english-dir and --japan-dir for other folders
+sh tools/convert_en.sh --japanese  # back to Japanese, the default
 ```
+
+`convert_en.sh` overwrites the text-bearing assets and generated headers. Never pass `--phys` with its English root (`build/en_root`): the recompiler must read the real `main`.
 
 There is no linter, formatter, CI or test runner. Each `test/*.c` is a standalone desktop program that prints results for a human to read, with its build line and arguments in its header comment. To run one:
 
@@ -90,4 +97,4 @@ Some header comments have drifted, so treat them as a starting point:
 
 ## Conventions
 
-Comments tie the code to the original binary by naming arcade symbols, addresses and struct offsets (`clRaceThread::race`, `SInfoCarEffect +0x68`, `0x97fda04`). This is the project's reverse-engineering record, so keep it and add the same references to new code. C is `gnu99` with 2-space indents. The Chinese `README.md` is the authoritative text of the legal notices.
+Comments tie the code to the original binary by naming arcade symbols, addresses and struct offsets (`clRaceThread::race`, `SInfoCarEffect +0x68`, `0x97fda04`). This is the project's reverse-engineering record, so keep it and add the same references to new code. C is `gnu99` with 2-space indents. The Chinese `README.zh.md` is the authoritative text of the legal notices.

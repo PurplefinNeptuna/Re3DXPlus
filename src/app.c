@@ -214,7 +214,7 @@ static struct {
   unsigned char arrow_switched[MAX_ARROWS]; /* named in the junction block table */
   int hk_arrow; /* Hakone's board shown: 0 none, 1 hk_for, 2 hk_back */
   int arrow_table_ready;
-  /* the course selects' 3D miniature of Tokyo (clMiniatureCourse, src/minicourse.h) */
+  /* the course selects' 3D miniatures (clMiniatureCourse, src/minicourse.h) */
   wpk_scene mini;
   unsigned char mini_visible[MINI_OBJECTS];
   const mini_course *mini_shown; /* the card it shows (NULL off the course selects) */
@@ -2547,10 +2547,13 @@ static void mini_draw(void *ctx, float fade) {
   const mini_course *mc = vs ? &MINI_VS[card] : ten ? &MINI_TEN[card] : &MINI_TA[card];
   if (!mc->on) return;
   if (mc != G.mini_shown) {
-    if (G.mini_shown) {
+    /* (no flight from one city's map to another's: they share no coordinates) */
+    if (G.mini_shown && G.mini_shown->map == mc->map) {
       memcpy(G.mini_from[0], G.mini_shown->eye, sizeof G.mini_from[0]);
       memcpy(G.mini_from[1], G.mini_shown->at, sizeof G.mini_from[1]);
       G.mini_move = MINI_MOVE;
+    } else {
+      G.mini_move = 0;
     }
     G.mini_shown = mc;
   }
@@ -2574,12 +2577,12 @@ static void mini_draw(void *ctx, float fade) {
   glClear(GL_DEPTH_BUFFER_BIT);
   render_begin(&rp);
   memset(G.mini_visible, 0, sizeof G.mini_visible);
-  G.mini_visible[MINI_MAP] = G.mini_visible[MINI_COURSE] = G.mini_visible[mc->macula] = 1;
+  G.mini_visible[mc->map] = G.mini_visible[mc->course] = G.mini_visible[mc->macula] = 1;
   for (int pass = 0; pass < WPK_PASSES; ++pass) {
     render_blend_pass(pass == WPK_BLEND);
     wpk_draw(&G.mini, &vp, &ident, eye, pass, &rp);
   }
-  int f = G.mini_frame++ % MINI_FRAMES;
+  int f = G.mini_frame++ % mc->frames;
   glDisable(GL_DEPTH_TEST);
   render_blend_pass(1);
   memset(G.mini_visible, 0, sizeof G.mini_visible);

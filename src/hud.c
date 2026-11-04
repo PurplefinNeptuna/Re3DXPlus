@@ -2563,10 +2563,8 @@ static void ui_quad(float x, float y, float w, float h) {
   v[6] = x + w, v[7] = y, v[8] = x + w, v[9] = y + h, v[10] = x, v[11] = y + h;
 }
 
-void hud_ui_begin(float screen_w, float screen_h) {
+static void ui_state(void) {
   glUseProgram(prog);
-  mat4 proj = screen_ortho(screen_w, screen_h);
-  glUniformMatrix4fv(u_proj, 1, GL_FALSE, proj.m);
   glDisable(GL_DEPTH_TEST);
   glDisable(GL_CULL_FACE);
   glEnable(GL_BLEND);
@@ -2575,6 +2573,12 @@ void hud_ui_begin(float screen_w, float screen_h) {
   glDisableVertexAttribArray(1);
   glDisableVertexAttribArray(2);
   glEnableVertexAttribArray(0);
+}
+
+void hud_ui_begin(float screen_w, float screen_h) {
+  ui_state();
+  mat4 proj = screen_ortho(screen_w, screen_h);
+  glUniformMatrix4fv(u_proj, 1, GL_FALSE, proj.m);
   ui_n = 0;
 }
 
@@ -2604,8 +2608,30 @@ float hud_ui_text_width(const char *s, float px) {
   return n ? (float)(6 * n - 1) * px : 0.0f;
 }
 
+/* menupack.py UI_FONT: font 3's ' ' to '~', 16 cells of 30 a row; an H fills 2..15 x 7..26 of its cell */
+#define UI_FONT 108100
+#define UI_CELL 30.0f
+
 float hud_ui_text(const char *s, float x, float y, float px, float r, float g, float b, float a) {
-  /* a shadow a pixel down and right, then the glyphs */
+  int font = anm_sprite(UI_FONT);
+  if (font >= 0) {
+    /* the arcade's letters, a 5 x 7 glyph's place and advance: anm's 640-wide layout, font 3's advance
+     * of 12 at 6 px apart, the H's middle on the glyph's */
+    ui_flush();
+    const float mul[4] = { r, g, b, a }, add[4] = { 0, 0, 0, 0 }, k = px / 3.2f, scale = 1.6f;
+    float cx = x;
+    for (const char *c = s; *c; ++c, cx += 6 * px) {
+      int ch = (unsigned char)*c >= 0x20 && (unsigned char)*c < 0x7f ? *c - 0x20 : '?' - 0x20;
+      const float src[4] = { (float)(ch % 16) * UI_CELL, (float)(ch / 16) * UI_CELL, (float)(ch % 16 + 1) * UI_CELL,
+                             (float)(ch / 16 + 1) * UI_CELL };
+      float x0 = (cx + 2.5f * px) / scale - 8.5f * k, y0 = (y + 3.5f * px) / scale - 16.5f * k;
+      const float dst[4] = { x0, y0, x0 + UI_CELL * k, y0 + UI_CELL * k };
+      anm_draw_part_col(font, src, dst, mul, add);
+    }
+    ui_state();
+    return x + hud_ui_text_width(s, px) + px;
+  }
+  /* (a menu.bin from before them) a shadow a pixel down and right, then the glyphs */
   for (int pass = 0; pass < 2; ++pass) {
     float o = pass ? 0.0f : fmaxf(1.0f, px * 0.35f), cx = x + o;
     if (pass) ui_color(r, g, b, a);

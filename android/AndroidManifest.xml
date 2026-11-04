@@ -4,7 +4,7 @@
   <uses-permission android:name="android.permission.INTERNET" />
   <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
   <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
-  <application android:label="湾岸3DX+携带版" android:icon="@mipmap/icon" android:hasCode="true"
+  <application android:label="Wangan 3DX+ Portable" android:icon="@mipmap/icon" android:hasCode="true"
       android:extractNativeLibs="false" android:largeHeap="true" android:isGame="true"
       android:appCategory="game" android:requestLegacyExternalStorage="true">
     <activity android:name=".MainActivity" android:exported="true"

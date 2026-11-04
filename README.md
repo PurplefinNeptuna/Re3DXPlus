@@ -1,153 +1,178 @@
 <p align="center"><img src="docs/logo.png" alt="Re3DX+" width="480"></p>
 
 <p align="center">
-  <a href="README.md"><img src="https://img.shields.io/badge/%E8%AF%AD%E8%A8%80-%E7%AE%80%E4%BD%93%E4%B8%AD%E6%96%87-brightgreen?style=for-the-badge" alt="简体中文"></a>
-  <a href="README.en.md"><img src="https://img.shields.io/badge/Language-English-lightgrey?style=for-the-badge" alt="English"></a>
+  <a href="README.zh.md"><img src="https://img.shields.io/badge/%E8%AF%AD%E8%A8%80-%E7%AE%80%E4%BD%93%E4%B8%AD%E6%96%87-lightgrey?style=for-the-badge" alt="简体中文"></a>
+  <a href="README.md"><img src="https://img.shields.io/badge/Language-English-brightgreen?style=for-the-badge" alt="English"></a>
 </p>
 
-# Re3DX+：湾岸 MIDNIGHT MAXIMUM TUNE 3DX+ 非官方移植（iOS / Android）
+# Re3DX+: an unofficial port of WANGAN MIDNIGHT MAXIMUM TUNE 3DX+ (iOS / Android)
 
-把街机《湾岸 MIDNIGHT MAXIMUM TUNE 3DX+》原生移植到旧款移动设备上的研究项目：
+A research project that ports the arcade game *WANGAN MIDNIGHT MAXIMUM TUNE 3DX+* natively to old mobile devices:
 
-- **iPad 3**（iOS 6.1.3，越狱，OpenGL ES 2.0，1024×768 60fps）
-- **iPhone 4**（iOS 6，同一套代码，3:2 画面）
-- **Android**（arm64，Android 9+，Vulkan 渲染器，也可切回 OpenGL ES 3；在小米 6 上开发）
+- **iPad 3** (iOS 6.1.3, jailbroken, OpenGL ES 2.0, 1024×768 at 60 fps)
+- **iPhone 4** (iOS 6, same code base, 3:2 screen)
+- **Android** (arm64, Android 9+, Vulkan renderer with an OpenGL ES 3 fallback; developed on a Xiaomi Mi 6)
 
-这不是模拟器。街机的赛车物理和比赛逻辑由 `tools/recomp/` 把原版 i386 程序静态重编译成 C（逐位一致），其余部分（渲染、菜单、HUD、声音、对战）照着原版逆向结果重写，美术、声音等素材在构建时从你自己的原版数据转换出来。
+This is not an emulator. The arcade's car physics and race logic are statically recompiled from the original i386 executable to C by `tools/recomp/` (bit-for-bit identical behaviour). Everything else (rendering, menus, HUD, sound, versus) is rewritten from reverse engineering of the original. Art, sound and other assets are converted at build time from your own copy of the original data.
 
-## 关于本移植版
+## About this port
 
 **WANGAN MIDNIGHT MAXIMUM TUNE 3DX+**
-**非官方移植研究项目**
-**移植制作：高橋涼介のFC**（GitHub：[Allannn-sudo](https://github.com/Allannn-sudo)）
+**Unofficial port research project**
+**Port by: 高橋涼介のFC** (GitHub: [Allannn-sudo](https://github.com/Allannn-sudo))
 
-本项目由 Bilibili UP 主「高橋涼介のFC」独立制作，旨在研究和展示原街机游戏在旧款设备上的原生运行、跨平台移植及硬件性能优化技术。
+This project was made independently by the Bilibili creator 「高橋涼介のFC」. Its aim is to study and demonstrate running the original arcade game natively on older devices, cross-platform porting, and hardware performance optimisation.
 
-### 非官方声明
+### Unofficial notice
 
-本移植版为第三方个人研究项目，**并非万代南梦宫娱乐（Bandai Namco Entertainment）官方发行的游戏版本**。
+This port is a third-party personal research project. **It is not a version of the game released by Bandai Namco Entertainment.**
 
-### 知识产权声明
+### Intellectual property notice
 
-《湾岸 MIDNIGHT》原作、原版街机游戏及其中涉及的名称、商标、人物、美术、音乐、音效、车辆品牌与其他受保护内容，其相关知识产权均归各自权利人所有。
+All intellectual property rights in the original *Wangan Midnight* work, the original arcade game, and the names, trademarks, characters, art, music, sound effects, vehicle brands and other protected content in them belong to their respective owners.
 
-本移植项目不主张拥有上述原作知识产权。
+This port project claims no ownership of the intellectual property of the original work.
 
-## 本仓库不包含任何原版内容
+*(The Chinese wording in [README.zh.md](README.zh.md) is the authoritative text of these notices.)*
 
-仓库里只有移植代码和转换工具。**不包含**：原版街机程序和数据、从中提取或转换出的任何素材（模型、贴图、动画、字体、音乐、音效、影片、文字）、由原版程序生成的代码和数据表，以及打包好的 ipa / apk。
+## No original content in this repository
 
-要构建并运行，你必须自己准备**合法取得的**原版《湾岸 MIDNIGHT MAXIMUM TUNE 3DX+》（日版）街机数据。请不要在 issue 或 PR 里上传原版文件或转换后的素材。
+This repository contains only the port's code and conversion tools. It does **not** contain the original arcade executable or data, any asset extracted or converted from them (models, textures, animations, fonts, music, sound effects, movies, text), code or data tables generated from the original executable, or prebuilt ipa / apk packages.
 
-## 目录
+To build and run it you must supply your own **legally obtained** copy of the original *WANGAN MIDNIGHT MAXIMUM TUNE 3DX+* (Japan) arcade data. Please do not upload original files or converted assets in issues or pull requests.
 
-```
-src/            游戏本体（C / Objective-C）
-  main.m, sound_ios.m, gk_ios.m   iOS 入口、音频、蓝牙对战（GameKit）
-  main_android.c                   Android 入口（NativeActivity 线程、AAudio）
-  vkgl.c / vkgl.h                  Android 用的 GLES→Vulkan 转换层
-  phys/rc_runtime.*                重编译物理的运行时（phys_rc.c 需自行生成）
-android/        Android 的 Java 外壳和 AndroidManifest.xml
-tools/          从原版数据生成代码表和素材的工具（Python）
-  gen_from_original.sh             一键生成所有“由原版生成”的文件
-  recomp/                          i386 → C 静态重编译器（物理）
-  stage/                           IGB 场景、车辆、灯光、贴纸等打包工具
-  upscale/                         Android 高清贴图（Real-ESRGAN + ASTC）辅助脚本
-  vkprogs/                         移植版自己的着色器源码（转成 SPIR-V 给 Vulkan 用）
-  vs_server.py                     联网对战服务器
-test/           桌面上的测试和截图程序
-docs/logo.png   项目 logo
-build.sh        iOS 构建（ipa / 直接部署到设备）
-build_android.sh  Android 构建（apk，不用 Gradle）
-prepare_*.sh    从原版数据转换声音、BGM、影片
-```
-
-iOS 的系统代码是 Objective-C，能和 C 一起编译，所以直接放在 `src/` 里；iOS 的 Info.plist 由 `build.sh` 现写。Android 需要 Java 外壳和 manifest，所以单独有 `android/` 文件夹。
-
-## 准备
-
-把原版数据文件夹放在本仓库**旁边**，并命名为 `Wangan Midnight Maximum Tune 3DX+ (Japan)`（里面应有 `main` 和 `data/`）：
+## Layout
 
 ```
-某个目录/
-  Wangan Midnight Maximum Tune 3DX+ (Japan)/   ← 你自己的原版数据
-  本仓库/
+src/            the game (C / Objective-C)
+  main.m, sound_ios.m, gk_ios.m   iOS entry point, audio, Bluetooth versus (GameKit)
+  main_android.c                   Android entry point (native thread, AAudio)
+  vkgl.c / vkgl.h                  GLES-to-Vulkan layer used on Android
+  phys/rc_runtime.*                runtime for the recompiled physics (generate phys_rc.c yourself)
+android/        Android's Java shell and AndroidManifest.xml
+tools/          tools that generate code tables and assets from the original data (Python)
+  gen_from_original.sh             generates every file derived from the original in one go
+  recomp/                          i386-to-C static recompiler (physics)
+  stage/                           packers for IGB scenes, cars, lights, stickers and more
+  upscale/                         helpers for Android HD textures (Real-ESRGAN + ASTC)
+  vkprogs/                         the port's own shader sources (compiled to SPIR-V for Vulkan)
+  vs_server.py                     online versus server
+test/           desktop tests and screenshot programs
+docs/logo.png   project logo
+build.sh        iOS build (ipa, or deploy straight to a device)
+build_android.sh  Android build (apk, no Gradle)
+prepare_*.sh    convert sound effects, BGM and movies from the original data
 ```
 
-需要的工具：
+The iOS platform code is Objective-C and compiles together with the C sources, so it lives in `src/`; iOS's Info.plist is written by `build.sh`. Android needs a Java shell and a manifest, which is why it has its own `android/` folder.
 
-- Python 3，以及 `pip install capstone unicorn pillow numpy`
-- `c++filt`（binutils）
-- ffmpeg（需带 Bink 解码器，用于影片）
-- iOS：macOS + Xcode（clang）、[theos](https://theos.dev) 里打过补丁的 `iPhoneOS9.3-armv7.sdk`（放在 `~/theos/sdks/`）、`ldid`
-- Android：Android SDK（build-tools、platform）和 NDK，JDK（Android Studio 自带的即可）
+## Setup
 
-## 第一步：生成代码表和物理
+Put the original data folder **next to** this repository and name it `Wangan Midnight Maximum Tune 3DX+ (Japan)` (it should contain `main` and `data/`):
+
+```
+some folder/
+  Wangan Midnight Maximum Tune 3DX+ (Japan)/   <- your own original data
+  this repository/
+```
+
+Tools you need:
+
+- Python 3 with `pip install capstone unicorn pillow numpy`
+- `c++filt` (binutils)
+- ffmpeg with the Bink decoder (for the movies)
+- iOS: macOS + Xcode (clang), a patched `iPhoneOS9.3-armv7.sdk` from [theos](https://theos.dev) (in `~/theos/sdks/`), and `ldid`
+- Android: the Android SDK (build-tools, platform) and NDK, and a JDK (the one bundled with Android Studio works)
+
+## Step 1: generate the code tables and the physics
 
 ```sh
 sh tools/gen_from_original.sh --phys
-# 原版不在默认位置时：sh tools/gen_from_original.sh /path/to/原版 --phys
+# if the original is somewhere else: sh tools/gen_from_original.sh /path/to/original --phys
 ```
 
-它会在原版程序上运行原版自己的查表函数（unicorn 模拟），生成 `src/*db.h`、`src/story*.h` 等 22 个头文件、`tools/` 下的列表文件，以及重编译出的物理代码 `src/phys/phys_rc.c` 和内存镜像 `data/phys.img`。从同一份原版生成的结果是固定的。
+This runs the original executable's own lookup functions (under the unicorn emulator) and writes the 22 headers such as `src/*db.h` and `src/story*.h`, the list files in `tools/`, the recompiled physics `src/phys/phys_rc.c` and its memory image `data/phys.img`. The output is deterministic for a given copy of the original.
 
-## 第二步：转换素材（输出到 `data/`）
+## Step 2: convert the assets (into `data/`)
 
-`sh tools/convert_assets.sh` 会一次完成下面所有步骤，使用除两个之外的全部 CPU 线程（可用 `JOBS=<n>` 修改），各步骤的日志写入 `build/convert/`。如需手动运行，以下命令都在仓库根目录运行，`<原版>` 指原版数据文件夹。
+`sh tools/convert_assets.sh` does all of the below in one go, using all CPU threads but two (`JOBS=<n>` to change that), and writes each step's log to `build/convert/`. To run the steps by hand, run these from the repository root. `<orig>` is the original data folder.
 
-| 产物 | 命令 |
+| Output | Command |
 |---|---|
-| 东京地图（早/晚）、路牌、天空 | `sh tools/stage/pack_tokyo.sh daytime`、`sh tools/stage/pack_tokyo.sh night` |
-| 其他城市 | `python3 tools/stage/pack_city.py <原版>/data <oosaka\|hakone\|nagoya\|fukuoka> <daytime\|night> data` |
-| 街灯、楼灯 | `python3 tools/stage/pack_lights.py <原版>/data data` |
-| 霓虹灯 | `python3 tools/stage/pack_neon.py <原版>/data data/neon.wpk` |
-| 车辆（含 aero、轮毂、剧情对手车） | `python3 tools/stage/pack_cars.py <原版> data/cars`，再加 `--aero a\|b\|c`、`--wheels`（输出到 `data/wheels`）、`--chara`（输出到 `data/chara`） |
-| 车辆 AO 烘焙（可选） | `cc -O2 -o bake_ao tools/stage/bake_ao.c -lm`，`./bake_ao data/cars/X.wpk data/cars/X.ao` |
-| 贴纸 | `python3 tools/stage/pack_vinyl.py <原版> data/vinyl` |
-| 路上车流 | `sh tools/stage/pack_traffic.sh`（输出到 `data/traffic`） |
-| 玩家初始车（FD3S） | `sh tools/stage/pack_car.sh`（输出 `data/fd3s.wpk`） |
-| 比赛 HUD、仪表 | `python3 tools/hudpack.py <原版>/data/sprite <原版>/main data` |
-| 小地图 | `python3 tools/navipack.py <原版>/data <原版>/main data` |
-| 菜单（动画、图片、文字） | `python3 tools/vsdiscs.py <原版>/data/sprite`，然后 `python3 tools/menupack.py <原版> data/menu.bin`（“i”说明页由 `tools/infopage.py` 用系统中文字体渲染，menupack 会自动调用） |
-| 其他城市的路灯 | `python3 tools/stage/pack_lights.py <原版>/data data <city> <路灯 igb> <建筑灯 igb>`（文件名见 `<city>/<time>/<time>.lua`，没有则写 `-`；参见 `tools/convert_assets.sh`） |
-| 其他城市的小地图 | `python3 tools/navipack.py <原版>/data <原版>/main data <OsNavi\|HkNavi\|NkNavi\|FkNavi>.igb navi_<city>.bin` |
-| 音效、BGM、影片 | `sh prepare_sound.sh`、`sh prepare_bgm.sh`（macOS 用 afconvert，其他系统用 ffmpeg）、`sh prepare_movie.sh` |
+| Tokyo map (day / night), road signs, sky | `sh tools/stage/pack_tokyo.sh daytime`, `sh tools/stage/pack_tokyo.sh night` |
+| Other cities | `python3 tools/stage/pack_city.py <orig>/data <oosaka\|hakone\|nagoya\|fukuoka> <daytime\|night> data` |
+| Street and building lights | `python3 tools/stage/pack_lights.py <orig>/data data` |
+| Under neons | `python3 tools/stage/pack_neon.py <orig>/data data/neon.wpk` |
+| Cars (aero kits, wheels, story rivals' cars) | `python3 tools/stage/pack_cars.py <orig> data/cars`, then with `--aero a\|b\|c`, `--wheels` (into `data/wheels`) and `--chara` (into `data/chara`) |
+| Car ambient occlusion bake (optional) | `cc -O2 -o bake_ao tools/stage/bake_ao.c -lm`, `./bake_ao data/cars/X.wpk data/cars/X.ao` |
+| Stickers | `python3 tools/stage/pack_vinyl.py <orig> data/vinyl` |
+| Traffic | `sh tools/stage/pack_traffic.sh` (into `data/traffic`) |
+| Starter car (FD3S) | `sh tools/stage/pack_car.sh` (writes `data/fd3s.wpk`) |
+| Race HUD and meters | `python3 tools/hudpack.py <orig>/data/sprite <orig>/main data` |
+| Minimap | `python3 tools/navipack.py <orig>/data <orig>/main data` |
+| Menus (animations, pictures, text) | `python3 tools/vsdiscs.py <orig>/data/sprite`, then `python3 tools/menupack.py <orig> data/menu.bin` (the "i" info page is rendered by `tools/infopage.py` with a system CJK font; menupack calls it) |
+| Other cities' street lights | `python3 tools/stage/pack_lights.py <orig>/data data <city> <street igb> <building igb>` (the files `<city>/<time>/<time>.lua` names, `-` for none; see `tools/convert_assets.sh`) |
+| Other cities' minimaps | `python3 tools/navipack.py <orig>/data <orig>/main data <OsNavi\|HkNavi\|NkNavi\|FkNavi>.igb navi_<city>.bin` |
+| Sound effects, BGM, movies | `sh prepare_sound.sh`, `sh prepare_bgm.sh` (afconvert on macOS, otherwise ffmpeg), `sh prepare_movie.sh` |
 
-Android 想用高清贴图时，可以用 Real-ESRGAN 放大地图贴图（`tools/upscale/mix.py`），再用 `WPK_TEX_ASTC=6 WPK_ASTCENC=<astcenc 路径>` 运行打包工具输出 ASTC 版地图（见 `tools/stage/pack.py` 开头说明），`tools/upscale/check.py` 可检查结果。
+For HD textures on Android, upscale the map textures with Real-ESRGAN (`tools/upscale/mix.py`), then run the packers with `WPK_TEX_ASTC=6 WPK_ASTCENC=<path to astcenc>` to write ASTC maps (see the notes at the top of `tools/stage/pack.py`). `tools/upscale/check.py` checks the result.
 
-## 第三步：图标
+## Step 3: app icon
 
-`tools/make_icon.py` 从 `data/icon/logo_allan2.jpg`（518×386）生成 iOS 6 风格的图标。仓库里没有附带图片，请放一张你自己有权使用的图片在这个位置。
+`tools/make_icon.py` makes iOS 6 style icons from `data/icon/logo_allan2.jpg` (518×386). No picture is included; put one you have the rights to use at that path.
 
-## 构建 iOS（iPad 3 / iPhone 4）
+## Optional: English text
+
+The default build is Japanese, and nothing below is needed for it. To switch the game's text to English, you also need your own copy of the **English-language version of 3DX+**, the same v386 build as the Japanese data. This port only reads its text and pictures: the cars, rivals and physics stay the Japanese version's, so the Blackbird is still a Gemballa.
+
+1. Unpack these from its disk image (a squashfs image that `7z` can open) into a folder next to the Japanese one, keeping their paths:
+
+   ```
+   Wangan Midnight Maximum Tune 3DX+ (English)/
+     main
+     data/sprite-us/  data/anime-us/  data/movie-us/  data/cutin/
+   ```
+
+2. After steps 1 and 2 above, run the conversion, then build the app as usual:
+
+   ```sh
+   sh tools/convert_en.sh                       # English
+   sh tools/convert_en.sh --japanese            # back to Japanese
+   sh tools/convert_en.sh --english-dir <path>  # your English folder has another name or place
+   sh tools/convert_en.sh --japan-dir <path>    # and the same for the Japanese one
+   ```
+
+Text, menus and the play demo and tutorial movies become English. The opening movie stays Japanese because the English version's shows different cars, and a few pictures it never translated stay Japanese too. The English comes from that version as it is, with its rough lines, except for the lines that name its different cars.
+
+## Build for iOS (iPad 3 / iPhone 4)
 
 ```sh
-./build.sh ipa            # iPad：build/WMMT3DX-1.0.ipa（数据打进 app 里）
-PHONE=1 ./build.sh ipa    # iPhone 4：build/WMMT3DX-1.0-iPhone4.ipa
-./build.sh deploy         # 通过 ssh 主机别名 `ipad` 直接部署到已越狱、装了 OpenSSH 的 iPad
+./build.sh ipa            # iPad: build/WMMT3DX-1.0.ipa (data inside the app)
+PHONE=1 ./build.sh ipa    # iPhone 4: build/WMMT3DX-1.0-iPhone4.ipa
+./build.sh deploy         # deploy to a jailbroken iPad with OpenSSH over the ssh host alias `ipad`
 ```
 
-ipa 是 ldid 伪签名，需要越狱设备装 AppSync 才能安装。`deploy` 需要你在 `~/.ssh/config` 里配好名为 `ipad` 的主机（例如 `iproxy 2222:22` 走 USB）。
+The ipa is fake-signed with ldid, so it needs a jailbroken device with AppSync. `deploy` needs a host named `ipad` in your `~/.ssh/config` (for example over USB with `iproxy 2222:22`).
 
-## 构建 Android
+## Build for Android
 
 ```sh
-./build_android.sh           # build/WMMT3DX-android.apk（Vulkan）
-VK=0 ./build_android.sh      # OpenGL ES 3 版
-./build_android.sh install   # 并用 adb 安装
-./build_android.sh data      # 并把 data/ 推到 /sdcard/Android/data/com.wmmt.port/files/wmmt
+./build_android.sh           # build/WMMT3DX-android.apk (Vulkan)
+VK=0 ./build_android.sh      # OpenGL ES 3 build
+./build_android.sh install   # and install it with adb
+./build_android.sh data      # and push data/ to /sdcard/Android/data/com.wmmt.port/files/wmmt
 ```
 
-默认 SDK 位置是 `~/Library/Android/sdk`，可以用 `ANDROID_HOME`、`JAVA_HOME` 改。apk 用构建时自动生成的本地密钥签名（`build/android/wmmt.keystore`）。着色器的 SPIR-V（`src/vkgl_spv.c`）由 `tools/vkglsl.py` 从 `tools/vkprogs/` 自动生成。
+The default SDK location is `~/Library/Android/sdk`; override it with `ANDROID_HOME` and `JAVA_HOME`. The apk is signed with a local key generated at build time (`build/android/wmmt.keystore`). The shaders' SPIR-V (`src/vkgl_spv.c`) is generated by `tools/vkglsl.py` from `tools/vkprogs/`.
 
-## 联网对战
+## Online versus
 
 ```sh
-python3 tools/vs_server.py [端口]    # 默认 UDP 27015，最多 4 人
+python3 tools/vs_server.py [port]    # UDP 27015 by default, up to 4 players
 ```
 
-在各设备的 VERSUS 画面输入这台电脑的 IP。iOS 之间也可以用蓝牙，局域网内也可以由一台设备当主机。
+Enter this computer's IP address on each device's VERSUS screen. iOS devices can also race over Bluetooth, and on a LAN one device can host.
 
-## 许可证
+## License
 
-MIT 许可证，见 [LICENSE](LICENSE)。许可证只覆盖本仓库里的移植代码和工具，不覆盖原版游戏及其任何内容。
+MIT, see [LICENSE](LICENSE). The license covers only the port's code and tools in this repository, not the original game or any of its content.

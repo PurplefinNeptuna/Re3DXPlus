@@ -28,7 +28,7 @@ cat > "$APP/Info.plist" <<'PL'
   <key>CFBundleExecutable</key><string>WMMT</string>
   <key>CFBundleIdentifier</key><string>com.wmmt.port</string>
   <key>CFBundleName</key><string>WMMT3DX</string>
-  <key>CFBundleDisplayName</key><string>湾岸3DX+携带版</string>
+  <key>CFBundleDisplayName</key><string>Wangan 3DX+ Portable</string>
   <key>CFBundlePackageType</key><string>APPL</string>
   <key>CFBundleVersion</key><string>1</string>
   <key>CFBundleShortVersionString</key><string>1.0</string>
@@ -84,7 +84,7 @@ if [ "$1" = "ipa" ]; then
   cp -R "../Wangan Midnight Maximum Tune 3DX+ (Japan)/data/rtmovie/table" "../Wangan Midnight Maximum Tune 3DX+ (Japan)/data/rtmovie/trail" "$APP/rtmovie/"
   # the story's in-race lines (Cut::clCutIn: data/cutin/jp)
   mkdir -p "$APP/cutin/jp"
-  cp "../Wangan Midnight Maximum Tune 3DX+ (Japan)/data/cutin/jp/"*.txt "$APP/cutin/jp/"
+  cp data/cutin/jp/*.txt "$APP/cutin/jp/"
   cp data/cars/* "$APP/cars/"
   # (and their baked ambient occlusion, tools/stage/bake_ao.c, as the car models' in data/cars)
   if [ -d data/chara ]; then mkdir -p "$APP/chara" && cp data/chara/*.wpk "$APP/chara/" && { cp data/chara/*.ao "$APP/chara/" 2>/dev/null || true; }; fi
@@ -168,7 +168,7 @@ if [ "$1" = "deploy" ]; then
   fi
   # the story's in-race lines (Cut::clCutIn); small, so always
   ssh ipad 'mkdir -p /var/mobile/Media/wmmt/cutin/jp'
-  scp -O "../Wangan Midnight Maximum Tune 3DX+ (Japan)/data/cutin/jp/"*.txt ipad:/var/mobile/Media/wmmt/cutin/jp/
+  scp -O data/cutin/jp/*.txt ipad:/var/mobile/Media/wmmt/cutin/jp/
   # front-end sprites and animations (tools/menupack.py); 18 MB, so only when it changed
   if [ "$(ssh ipad 'md5sum /var/mobile/Media/wmmt/menu.bin 2>/dev/null' | cut -d' ' -f1)" != "$(md5 -q data/menu.bin)" ]; then
     scp -O data/menu.bin ipad:/var/mobile/Media/wmmt/
@@ -238,5 +238,5 @@ if [ "$1" = "deploy" ]; then
   ssh ipad 'chown -R mobile:mobile /var/mobile/Media/wmmt; chmod -R a+rX /var/mobile/Media/wmmt'
   scp -O -r "$APP" ipad:/Applications/
   ssh ipad 'chown -R root:wheel /Applications/WMMT.app; chmod 755 /Applications/WMMT.app/WMMT; su mobile -c uicache'
-  echo "deployed; tap the 湾岸3DX icon on the iPad"
+  echo "deployed; tap the Wangan 3DX+ Portable icon on the iPad"
 fi

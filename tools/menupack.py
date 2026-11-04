@@ -40,7 +40,6 @@ ANIMS = [
     ("menu_layout_ta_carsel", None),
     ("menu_layout_ta_carsel_ring", None),
     ("menu_layout_ta_course", None),  # the 12 course cards, 100 frames each
-    ("menu_g_course_map", None),      # mapChange: the other cities' map beside cards 6..9
     ("menu_layout_ta_course_arrow", None),
     # attract: the maker logos (seqAtructCi) and the time attack ranking (clRanking)
     ("atract_layout_logo_bng", None),
@@ -467,12 +466,12 @@ EXTRA += [0x1bde, 0x1bdb, 0x1bdf, 0x1bdc, 0x18cb, 0x1aaa, *range(0x1cc2, 0x1cca)
           0x1f6d, 0x1f09]
 ZIPPED_WHEELS = set(WHEEL_SET_SPRITES)
 # all the courses (push73): the course cards' backgrounds and names by course id
-# (nsTaData 0x93e33e0, 0x93e3420), the race title page's (0x93ddac0) for both time zones, the
-# city maps of mapChange (cards 6..9) and the result's section labels 5..7
+# (nsTaData 0x93e33e0, 0x93e3420), the race title page's (0x93ddac0) for both time zones and
+# the result's section labels 5..7
 ALL_COURSE_SPRITES = sorted({2863, 2866, 2869, 2865, 2870, 2873, 2880, 2357, 2355, 2885, 3930, 6244, 2359,
                              3901, 3904, 3907, 3903, 3908, 3911, 3918, 3293, 3292, 3923, 5608, 6779, 3295,
                              3931, 3932, 3933, 3934, 5609, 3936, 5610, 3937, 3944, 3939, 5611, 3941, 3942, 3943,
-                             5612, 0x1832, 0x15b9, 0x19a4, 0x1831, 7269, 7270, 7271})
+                             5612, 7269, 7270, 7271})
 EXTRA += ALL_COURSE_SPRITES
 # the 10-in-a-row (src/tendb.h, menu.c): the level boxes' names, horsepower, R35 tune steps and
 # medals (0x940d320, 0x940d3a4), the faces (0x940d160), the top bar's messages, and the race
@@ -624,18 +623,19 @@ STORYCUT = [(f[0], int(f[1]), *f[2:]) for f in (l.rstrip("\n").split("\t") for l
 SETTING_TEXTS = [(3, "STOCK"), (3, "FULL TUNE"), (3, "AT"), (3, "MT"), (1, "TAP THE CAR TO GO ON")]
 # The port's own OPTION screen (menu.c draw_option), pre-rendered as OPTION_TEXT_BASE + k.
 OPTION_TEXT_BASE = 101900
-OPTION_TEXTS = [(3, "CONTROLS"), (3, "BUTTONS"), (3, "GYRO"), (1, "STEERING"), (1, "GYRO SENSITIVITY"),
-                (3, "GRAPHICS"), (1, "BRIDGE REFLECTION"), (3, "ON"), (3, "OFF"),
-                (1, "TILT THE IPAD TO STEER"), (3, "OPTION"), (1, "FSR SHARPENING"),
+# (the rows' labels and choices in one font, drawn at 2/3: menu.c opt_text)
+OPTION_TEXTS = [(3, "CONTROLS"), (3, "BUTTONS"), (3, "GYRO"), (3, "STEERING"), (3, "GYRO SENSITIVITY"),
+                (3, "GRAPHICS"), (3, "BRIDGE REFLECTION"), (3, "ON"), (3, "OFF"),
+                (1, "TILT THE IPAD TO STEER"), (3, "OPTION"), (3, "FSR SHARPENING"),
                 (1, "Maybe......Hidden Cars?"),  # (the maker select's hidden cars key)
-                (1, "SLIDER PEDALS"), (1, "AMBIENT OCCLUSION"), (1, "BACK MIRROR"),
+                (3, "SLIDER PEDALS"), (3, "AMBIENT OCCLUSION"), (3, "BACK MIRROR"),
                 (1, "ALL PARTS & TUNE:  ON"), (1, "ALL PARTS & TUNE:  OFF"),  # (the colour select's key)
                 # Android's GRAPHICS rows (menu.c draw_option's hq rows)
-                (1, "HD TEXTURES"), (1, "BLOOM"), (1, "SSAO"), (1, "WET ROAD"), (1, "PAINT REFLECTION"),
-                (1, "ANTI-ALIASING"), (3, "4X"), (3, "2X"),
+                (3, "HD TEXTURES"), (3, "BLOOM"), (3, "SSAO"), (3, "WET ROAD"), (3, "PAINT REFLECTION"),
+                (3, "ANTI-ALIASING"), (3, "4X"), (3, "2X"),
                 # the testers' story switch (menu.c O_TEST): off, then the divisions it opens
                 (1, "STORY TEST: OFF")] + [(1, "STORY TEST: %sEPISODES %d-%d OPEN" % ("2ND LOOP " if k >= 5 else "", 20 * (k % 5) + 1, 20 * (k % 5) + 20))
-                                           for k in range(10)]
+                                           for k in range(10)] + [(3, "WHEEL"), (3, "STICK")]
 # The versus select (menu.c MENU_VS_SEL, menu_layout_mode_sel_3 and its picture and ring with
 # the port's discs in the story, 10 out run and time attack discs' places): the top bars'
 # titles as VS_TEXT_BASE + k, the discs (tools/vsdiscs.py, tools/vsdisc/) as VS_ICON_BASE + k
@@ -703,6 +703,10 @@ SAVE_GLYPHS = "0123456789/:"
 # the SAVE DATA screen's "i" key and its page (menu.c MENU_INFO; tools/infopage.py, in a CJK
 # font of the machine's), the page kept zlib-packed
 INFO_KEY, INFO_PAGE = 108000, 108001
+# hud.c hud_ui_text's letters, the port's own text with no pre-rendered sprite (key labels, the versus
+# lobby's addresses and names): ' ' to '~' in font 3, UI_FONT_COLS a row of cells
+UI_FONT, UI_FONT_COLS = 108100, 16
+ZIPPED |= {UI_FONT}
 ZIPPED |= {INFO_PAGE}
 # The save's cars (menu.c's HAVE, GARAGE and CARD screens) as CARD_TEXT_BASE + k; the
 # "do you have a card?" cards (clSeqCardHaveSelectThread's menu_p_yn_card_have_yes and _no)
@@ -857,9 +861,24 @@ def font_sheet(path):
     return Image.open(path).convert("RGBA")
 
 
+@functools.lru_cache(maxsize=None)
+def literals(root):
+    """the tools' own Japanese strings' English, on an English root (tools/lang_en.py)"""
+    path = f"{root}/lang.txt"
+    return [l.rstrip("\n").split("\t") for l in open(path, encoding="utf-8")] if os.path.exists(path) else []
+
+
+def localize(root, text):
+    if len(text) > 1:  # (a lone glyph is the name grid's)
+        for x, y in literals(root):
+            text = text.replace(x, y)
+    return text
+
+
 def render_text(elf, names, root, font, text):
     """clSpriteFont::draw: glyph g of a font is cell g % cells of page sprite g // cells;
     the advance is the half or full width (chars above 0x7f)."""
+    text = localize(root, text)
     nglyph, half, full, cell, cols, _, cells, pages, glyph_map = struct.unpack_from(
         "<9I", elf.d, elf.off(FONT_TABLE + 36 * font))
     w = sum(half if ord(c) <= 0x7F else full for c in text) - (half if ord(text[-1]) <= 0x7F else full) + cell
@@ -882,6 +901,7 @@ def render_lines(elf, names, root, font, lines):
     width further down. The sprite is the widest line's advances (updateSize's width) plus a
     cell wide, so the drawer can take that width back off."""
     _, half, full, cell = struct.unpack_from("<4I", elf.d, elf.off(FONT_TABLE + 36 * font))
+    lines = [localize(root, t) for t in lines]
     adv = [sum(half if ord(c) <= 0x7F else full for c in t) for t in lines]
     out = Image.new("RGBA", (max(adv) + cell, full * (len(lines) - 1) + cell))
     for i, t in enumerate(lines):
@@ -994,6 +1014,12 @@ def main():
     import infopage
     sprites += [infopage.render_key(), infopage.render_page()]
     ids += [INFO_KEY, INFO_PAGE]
+    cell = struct.unpack_from("<4I", elf.d, elf.off(FONT_TABLE + 36 * 3))[3]
+    letters = Image.new("RGBA", (UI_FONT_COLS * cell, 6 * cell))
+    for k in range(0x7F - 0x20):
+        letters.alpha_composite(render_text(elf, names, root, 3, chr(0x20 + k)), (k % UI_FONT_COLS * cell, k // UI_FONT_COLS * cell))
+    sprites.append(letters)
+    ids.append(UI_FONT)
 
     for k, (font, text) in enumerate(CARD_TEXTS):
         sprites.append(render_text(elf, names, root, font, text))

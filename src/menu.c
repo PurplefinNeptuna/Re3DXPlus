@@ -37,7 +37,7 @@
  *   k*100+90..99 selection moves on to k+1.
  * - menu_layout_ta_course_arrow: k*100+10..49 the arrows' pulse for course k. */
 static struct {
-  int title, bg, line, logo, top, bottom, mode, mode_ring, course, arrow, course_map;
+  int title, bg, line, logo, top, bottom, mode, mode_ring, course, arrow;
   int ten_timeup, ten_face, ten_x, ten_finish, ten_summary; /* clTenResult */
   int game, game_image, game_ring; /* the game mode select */
   int vs_sel, vs_sel_image, vs_sel_ring; /* the versus select */
@@ -1718,7 +1718,7 @@ enum {
   O_SHARP, O_HIDDEN /* the maker select's hidden cars key */, O_PEDALS, O_AO, O_BM,
   O_ALL_ON, O_ALL_OFF /* the colour select's ALL PARTS key */,
   O_HD, O_BLOOM, O_SSAO, O_WET, O_PAINT, O_AA, O_4X, O_2X /* Android's GRAPHICS rows */,
-  O_TEST /* the testers' switch's note: off, then the ten divisions */ , O_N = O_TEST + 11
+  O_TEST /* the testers' switch's note: off, then the ten divisions */, O_WHEEL = O_TEST + 11, O_STICK
 };
 #define OPT_CHIP_X 300.0f
 #define OPT_STEER_Y 152.0f /* the rows' middles */
@@ -1734,23 +1734,32 @@ enum {
 #define OPT_GRAPHICS_HALF 11.0f
 #define OPT_LIGHT_DX 19.0f
 
+/* The rows' labels and choices: font 3 at 2/3, one look and one size under the bigger headers. y
+ * is the row's middle, an H's middle in font 3's cell of 30 (7..26). */
+#define OPT_ROW_K (2.0f / 3.0f)
+#define OPT_ROW_PX (8.0f * 1.6f / 6.0f) /* hud_ui_text's size for the same advance, 8 at 640 wide */
+static float opt_w(int id) { return anm_sprite_width(anm_sprite(OPT_TEXT + id)) * OPT_ROW_K; }
+static void opt_text(int id, float x, float y, float a) {
+  int s = anm_sprite(OPT_TEXT + id);
+  float w = anm_sprite_width(s), h = anm_sprite_height(s), top = y - 16.5f * OPT_ROW_K;
+  const float src[4] = { 0, 0, w, h }, dst[4] = { x, top, x + w * OPT_ROW_K, top + h * OPT_ROW_K };
+  anm_draw_part(s, src, dst, a);
+}
+
 /* a row's two chips' left edges */
 static void option_chips(int first, float x[2]) {
   x[0] = OPT_CHIP_X;
-  x[1] = x[0] + anm_sprite_width(anm_sprite(OPT_TEXT + first)) + SET_CHIP_GAP;
+  x[1] = x[0] + opt_w(first) + SET_CHIP_GAP;
 }
 
-/* the steering's two chips after BUTTONS and GYRO (the HUD's letters): WHEEL, STICK; their
- * left edges and widths (640 x 480) */
-#define OPT_STEER_PX 2.5f
+/* the steering's two chips after BUTTONS and GYRO: WHEEL, STICK; their left edges and widths (640 x 480) */
 #define OPT_STEER_GAP 14.0f
-static const char *const OPT_STEER_TEXT[2] = { "WHEEL", "STICK" };
 static void option_steer_chips(float x[2], float w[2]) {
   float c[2];
   option_chips(O_BUTTONS, c);
-  float at = c[1] + anm_sprite_width(anm_sprite(OPT_TEXT + O_BUTTONS + 1)) + OPT_STEER_GAP;
+  float at = c[1] + opt_w(O_BUTTONS + 1) + OPT_STEER_GAP;
   for (int k = 0; k < 2; ++k) {
-    w[k] = hud_ui_text_width(OPT_STEER_TEXT[k], OPT_STEER_PX) / 1.6f;
+    w[k] = opt_w(O_WHEEL + k);
     x[k] = at;
     at += w[k] + OPT_STEER_GAP;
   }
@@ -1763,15 +1772,10 @@ static int option_steer_chip(const menu_state *m) {
     if (m->tap_x >= x[k] - OPT_STEER_GAP * 0.5f && m->tap_x < x[k] + w[k] + OPT_STEER_GAP * 0.5f) return HUD_STEER_WHEEL + k;
   return -1;
 }
-static void draw_option_steer(const menu_state *m, float screen_w, float screen_h) {
+static void draw_option_steer(const menu_state *m) {
   float x[2], w[2];
   option_steer_chips(x, w);
-  hud_ui_begin(screen_w, screen_h);
-  for (int k = 0; k < 2; ++k) {
-    float a = m->gyro == HUD_STEER_WHEEL + k ? 1.0f : 0.3f;
-    hud_ui_text(OPT_STEER_TEXT[k], x[k] * 1.6f, (OPT_STEER_Y - 7.0f) * 1.6f, OPT_STEER_PX, 1, 1, 1, a);
-  }
-  hud_ui_end();
+  for (int k = 0; k < 2; ++k) opt_text(O_WHEEL + k, x[k], OPT_STEER_Y, m->gyro == HUD_STEER_WHEEL + k ? 1.0f : 0.3f);
 }
 
 /* which of a row's chips a tap is on (-1 none) */
@@ -1781,7 +1785,7 @@ static int option_chip(const menu_state *m, int first, float y) {
   if (m->tap_y < y - half || m->tap_y >= y + half) return -1;
   for (int k = 1; k >= 0; --k)
     if (m->tap_x >= x[k] - SET_CHIP_GAP * 0.5f &&
-        m->tap_x < x[k] + anm_sprite_width(anm_sprite(OPT_TEXT + first + k)) + SET_CHIP_GAP * 0.5f)
+        m->tap_x < x[k] + opt_w(first + k) + SET_CHIP_GAP * 0.5f)
       return k;
   return -1;
 }
@@ -1812,7 +1816,7 @@ static int *option_hq_value(menu_state *m, int row) {
 
 static void option_hq_chips(int row, float x[2]) {
   x[0] = OPT_HQ_ROW[row].chip_x;
-  x[1] = x[0] + anm_sprite_width(anm_sprite(OPT_TEXT + OPT_HQ_ROW[row].first)) + SET_CHIP_GAP;
+  x[1] = x[0] + opt_w(OPT_HQ_ROW[row].first) + SET_CHIP_GAP;
 }
 
 static void option_hq_step(menu_state *m) {
@@ -1822,7 +1826,7 @@ static void option_hq_step(menu_state *m) {
     option_hq_chips(row, x);
     for (int k = 1; k >= 0; --k)
       if (m->tap_x >= x[k] - SET_CHIP_GAP * 0.5f &&
-          m->tap_x < x[k] + anm_sprite_width(anm_sprite(OPT_TEXT + OPT_HQ_ROW[row].first + k)) + SET_CHIP_GAP * 0.5f) {
+          m->tap_x < x[k] + opt_w(OPT_HQ_ROW[row].first + k) + SET_CHIP_GAP * 0.5f) {
         option_set(m, option_hq_value(m, row), !k);
         break;
       }
@@ -1834,10 +1838,10 @@ static void draw_option_hq(const menu_state *m) {
   for (int row = 0; row < 10; ++row) {
     float y = OPT_HQ_Y + OPT_HQ_DY * (float)(row % 5), x[2];
     int on = *option_hq_value((menu_state *)m, row);
-    anm_draw_sprite(anm_sprite(OPT_TEXT + OPT_HQ_ROW[row].label), OPT_HQ_ROW[row].x, y - 10.0f, 1);
+    opt_text(OPT_HQ_ROW[row].label, OPT_HQ_ROW[row].x, y, 1);
     option_hq_chips(row, x);
     for (int k = 0; k < 2; ++k)
-      anm_draw_sprite(anm_sprite(OPT_TEXT + OPT_HQ_ROW[row].first + k), x[k], y - 15.0f, on == !k ? 1.0f : 0.3f);
+      opt_text(OPT_HQ_ROW[row].first + k, x[k], y, on == !k ? 1.0f : 0.3f);
   }
 }
 
@@ -1848,7 +1852,7 @@ static const char *const OPT_RES_PAD[2] = { "1024 X 768", "2048 X 1536" };
 /* an iPhone's (res_phone): the 4's 480x320 or the Retina 960x640 (the 4S: Allan 10-29) */
 static const char *const OPT_RES_PHONE[2] = { "480 X 320", "960 X 640" };
 static const char *const *opt_res(const menu_state *m) { return m->res_phone ? OPT_RES_PHONE : OPT_RES_PAD; }
-#define OPT_RES_PX 2.0f
+#define OPT_RES_PX OPT_ROW_PX
 static void option_res_chips(const menu_state *m, float x[2], float w[2]) {
   for (int k = 0; k < 2; ++k) w[k] = hud_ui_text_width(opt_res(m)[k], OPT_RES_PX) / 1.6f;
   x[0] = OPT_CHIP_X;
@@ -1866,7 +1870,7 @@ static void option_res_step(menu_state *m) {
     }
 }
 
-/* (its band is draw_option's, under the bars; the words over them, the HUD's) */
+/* (its band is draw_option's, under the bars; the words over them, hud_ui_text's) */
 static void draw_option_res(const menu_state *m, float screen_w, float screen_h) {
   float x[2], w[2], k = 1.6f, top = OPT_RES_Y * k - 3.5f * OPT_RES_PX;
   hud_ui_begin(screen_w, screen_h);
@@ -2009,8 +2013,8 @@ static void draw_option_layout_key(float screen_w, float screen_h) {
   hud_ui_begin(screen_w, screen_h);
   hud_ui_button(r[0] * k, r[1] * k, r[2] * k, r[3] * k, 0);
   const char *s = "KEY LAYOUT >";
-  hud_ui_text(s, (r[0] + 0.5f * r[2]) * k - 0.5f * hud_ui_text_width(s, 2.5f), (r[1] + 0.5f * r[3]) * k - 3.5f * 2.5f, 2.5f, 1,
-              1, 1, 1);
+  hud_ui_text(s, (r[0] + 0.5f * r[2]) * k - 0.5f * hud_ui_text_width(s, OPT_ROW_PX), (r[1] + 0.5f * r[3]) * k - 3.5f * OPT_ROW_PX,
+              OPT_ROW_PX, 1, 1, 1, 1);
   hud_ui_end();
 }
 
@@ -2062,13 +2066,13 @@ static void draw_option(const menu_state *m, int clock, int bars) {
 
   anm_draw_sprite(anm_sprite(T_SET_BAND), -192.0f, OPT_STEER_Y - 20.0f, 0.5f);
   float x[2];
-  anm_draw_sprite(anm_sprite(OPT_TEXT + O_STEERING), 16.0f, OPT_STEER_Y - 10.0f, 1);
+  opt_text(O_STEERING, 16.0f, OPT_STEER_Y, 1);
   option_chips(O_BUTTONS, x);
   for (int k = 0; k < 2; ++k)
-    anm_draw_sprite(anm_sprite(OPT_TEXT + O_BUTTONS + k), x[k], OPT_STEER_Y - 15.0f, m->gyro == k ? 1.0f : 0.3f);
+    opt_text(O_BUTTONS + k, x[k], OPT_STEER_Y, m->gyro == k ? 1.0f : 0.3f);
   /* the sensitivity: ten lights (the setting's gauge, lit by the s1..s3 colours) and its number */
   float a = m->gyro == HUD_STEER_GYRO ? 1.0f : 0.3f;
-  anm_draw_sprite(anm_sprite(OPT_TEXT + O_SENS), 16.0f, OPT_SENS_Y - 10.0f, a);
+  opt_text(O_SENS, 16.0f, OPT_SENS_Y, a);
   for (int i = 0; i < 10; ++i) {
     float gx = OPT_CHIP_X + OPT_LIGHT_DX * ((float)i + 0.5f) - 32.0f, gy = OPT_SENS_Y - 32.0f;
     anm_draw_sprite(anm_sprite(T_SET_EMPTY), gx, gy, a);
@@ -2079,9 +2083,9 @@ static void draw_option(const menu_state *m, int clock, int bars) {
   anm_draw_sprite(anm_sprite(T_SET_DIGIT + m->gyro_sens % 10), nx + 22.0f, OPT_SENS_Y - 33.0f, a);
   /* the slider pedals (Allan, 10-25): ON, the throttle and brake keys take the finger's height */
   option_chips(O_ON, x);
-  anm_draw_sprite(anm_sprite(OPT_TEXT + O_PEDALS), 16.0f, OPT_PEDAL_Y - 10.0f, 1);
+  opt_text(O_PEDALS, 16.0f, OPT_PEDAL_Y, 1);
   for (int k = 0; k < 2; ++k)
-    anm_draw_sprite(anm_sprite(OPT_TEXT + O_ON + k), x[k], OPT_PEDAL_Y - 15.0f, m->pedal_slide == !k ? 1.0f : 0.3f);
+    opt_text(O_ON + k, x[k], OPT_PEDAL_Y, m->pedal_slide == !k ? 1.0f : 0.3f);
   /* GRAPHICS */
   anm_draw_sprite(anm_sprite(T_SET_COURSE_BAND), -1.7f, OPT_GRAPHICS_Y, 0.5f);
   anm_draw_sprite(anm_sprite(OPT_TEXT + O_GRAPHICS), 24.0f, OPT_GRAPHICS_Y + 17.0f, 1);
@@ -2094,8 +2098,8 @@ static void draw_option(const menu_state *m, int clock, int bars) {
     const int *const ON[4] = { &m->over_on, &m->sharp_on, &m->ao_on, &m->bm_on };
     float y = Y[row];
     int on = *ON[row];
-    anm_draw_sprite(anm_sprite(OPT_TEXT + LABEL[row]), 16.0f, y - 10.0f, 1);
-    for (int k = 0; k < 2; ++k) anm_draw_sprite(anm_sprite(OPT_TEXT + O_ON + k), x[k], y - 15.0f, on == !k ? 1.0f : 0.3f);
+    opt_text(LABEL[row], 16.0f, y, 1);
+    for (int k = 0; k < 2; ++k) opt_text(O_ON + k, x[k], y, on == !k ? 1.0f : 0.3f);
   }
   if (m->res_row) anm_draw_sprite(anm_sprite(T_SET_BAND), -192.0f, OPT_RES_Y - 20.0f, 0.5f);
   anm_swap title = { anm_sprite(T_TOPBAR_MES), anm_sprite(OPT_TEXT + O_TITLE) };
@@ -4993,7 +4997,6 @@ void menu_init(menu_state *m) {
   ID.plate = anm_find("menu_g_car_tg_decide");
   ID.plate_ph = anm_find("menu_g_car_tg_decide_ph");
   ID.course = anm_find("menu_layout_ta_course");
-  ID.course_map = anm_find("menu_g_course_map");
   ID.arrow = anm_find("menu_layout_ta_course_arrow");
   ID.maker[0] = anm_find("atract_layout_logo_bng");
   ID.maker[1] = anm_find("atract_layout_logo_namco");
@@ -7907,8 +7910,7 @@ static void draw_vs(const menu_state *m, int clock, int bars, float screen_w, fl
  *   the fourth card on while the card was 5 or less, going left at 2 from the third on, the
  *   strip sliding 17.6 px a frame for the move's 5 frames (0x93fba54).
  * - The map: clMiniatureCourse with the versus' table (0x93fa400: Tokyo's cards on the 3D
- *   miniature) or mapChange's city picture (Nagoya, Osaka, Fukuoka, Hakone), as the time
- *   attack's.
+ *   miniature, and the port's for the other cities), as the time attack's.
  * - 20 s on the top bar (clMenuBarStd::setTime: menu_g_timer_x, ti_count each second from 9);
  *   at 0 the card under the cursor is the vote. Omakase votes a random area (the timer's
  *   bits: Hakone, 6, at half the odds), which the cursor walks to.
@@ -8151,14 +8153,9 @@ static void draw_vs_area(const menu_state *m, int clock, int bars, float screen_
   draw_back(ID.bg, clock % 600, fade);
   anm_draw(ID.line, 0, fade);
   draw_bg_logo(chosen_car(m, m->car), clock % 240, fade);
-  /* mapChange: the city's picture for Nagoya, Osaka, Fukuoka, Hakone; Tokyo's the miniature */
-  static const int CITY_MAP[4] = { 0x1832, 0x15b9, 0x19a4, 0x1831 };
-  int k = m->vs.item, city = k >= 5 && k <= 8;
-  if (mini3d && k >= 1 && k <= 4) mini3d((void *)m, fade);
-  if (city && m->vs.item_from < 0 && ID.course_map >= 0) {
-    anm_swap map = { anm_sprite(0x15b9), anm_sprite(CITY_MAP[k - 5]) };
-    anm_draw_ex(ID.course_map, 0, fade, 0, 0, &map, 1);
-  }
+  /* (the arcade's mapChange shows a picture of Japan for Nagoya, Osaka, Fukuoka and Hakone; the
+   * port draws their miniatures too, from the tables' own files) */
+  if (mini3d) mini3d((void *)m, fade);
   anm_swap sw[AREA_NSWAP];
   int n = 0;
   for (int i = 0; i < 8; ++i) sw[n++] = (anm_swap){ anm_sprite(AREA_PICTURE[i][0]), anm_sprite(AREA_PICTURE[i][1]) };
@@ -9154,7 +9151,7 @@ void menu_draw(const menu_state *m, float screen_w, float screen_h, void (*draw3
     draw_option(m, clock, bars);
     if (m->res_row) draw_option_res(m, screen_w, screen_h);
     draw_option_layout_key(screen_w, screen_h);
-    draw_option_steer(m, screen_w, screen_h);
+    draw_option_steer(m);
     hud_draw_menu_keys(screen_w, screen_h, m->key_held, m->gyro == HUD_STEER_GYRO, 1);
     anm_fill(0, 0, 0, 1.0f - fade);
     return;
@@ -9359,17 +9356,10 @@ void menu_draw(const menu_state *m, float screen_w, float screen_h, void (*draw3
     anm_draw_ex(ID.mode, f, fade, 0, 0, mode_cars, 2);
     if (m->from < 0 && !m->deciding && m->t < 60) anm_draw(ID.mode_ring, m->sel * 100 + m->t, fade);
   } else {
-    /* clThread_6_2_CourseSelect::mapChange (the 10-in-a-row's clThread_7_1_CourseSelect::
-     * mapChange, by tenCourseIDFromMenuOrder's id: 8 Hakone, 9 Fukuoka, cards 9 and 8): the
-     * city's map for cards 6..9, Nagoya, Osaka, Fukuoka, Hakone; the others' (Tokyo's, the time
-     * attack's 10 and 11 too; flag 0x3c / 0x38 clear) clMiniatureCourse::update, the 3D map */
-    static const int CITY_MAP[4] = { 0x1832, 0x15b9, 0x19a4, 0x1831 };
-    int city = m->sel >= 6 && m->sel <= 9;
-    if (mini3d && !city) mini3d((void *)m, fade);
-    if (city && m->from < 0 && ID.course_map >= 0) {
-      anm_swap map = { anm_sprite(0x15b9), anm_sprite(CITY_MAP[m->sel - 6]) };
-      anm_draw_ex(ID.course_map, 0, fade, 0, 0, &map, 1);
-    }
+    /* clMiniatureCourse::update, the 3D map. (The arcade's clThread_6_2_CourseSelect::mapChange
+     * and clThread_7_1_CourseSelect::mapChange set flag 0x3c / 0x38 for cards 6..9, Nagoya, Osaka,
+     * Fukuoka and Hakone, for a picture of Japan instead; the port draws their miniatures too.) */
+    if (mini3d) mini3d((void *)m, fade);
     if (m->screen == MENU_TEN_COURSE) anm_draw_ex(ID.or_course, f, fade, course_dx(m), 0, NULL, 0);
     else anm_draw_ex(ID.course, f, fade, course_dx(m), 0, km_swaps, km_nswaps);
   }
