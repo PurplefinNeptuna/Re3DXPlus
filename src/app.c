@@ -442,6 +442,16 @@ enum { SEG_SKY, SEG_OPAQUE, SEG_CUTOUT, SEG_BLEND, SEG_LIGHTS, SEG_WARM, SEG_BLU
  * vsyncs went by, as ever. */
 static volatile int display_hz = 60;
 
+/* The best quality the governor may reach on a display above 60 Hz. Level 5 is the highest that
+ * held 120 fps with no missed frames on a Galaxy Tab S9+ (each level locked for 60 s, C1 morning);
+ * level 4 missed 1% and level 0 made 87 fps, so starting there only stuttered the way down.
+ * shortcut: one device's number for every fast display, measure per GPU when another one matters */
+#define GOV_FAST_BEST 5
+
+static int gov_best(void) {
+  return display_hz > 60 ? GOV_FAST_BEST : 0;
+}
+
 static void perf_frame(float dt, int steps, double phys, double render, int warmed, const render_params *rp) {
   G.race_time += dt;
   if (phys > G.max_phys) G.max_phys = phys;
@@ -454,14 +464,15 @@ static void perf_frame(float dt, int steps, double phys, double render, int warm
    * chunk's first draw aside) gives up the next of render_hq's costs; 1200 frames without a
    * miss take one back, unless the level above missed again soon after its last return */
   if (G.console && !getenv("WMMT_HQ_LEVEL")) { /* (test: that level, held, to measure it) */
-    G.gov_slow += dt > 1.25f / (float)hz && !rp->new_chunks && !warmed;
+    /* (above 60 Hz not the race's first 2 s: its start's hitches took level 5 down for 10 s) */
+    G.gov_slow += dt > 1.25f / (float)hz && !rp->new_chunks && !warmed && (hz <= 60 || G.race_frames > 2 * hz);
     if (G.gov_since_up) G.gov_since_up++; /* (0: never went up) */
     int window = G.gov_slow ? 120 : 1200, level = G.gov_level;
     if (++G.gov_frames >= window) {
       if (G.gov_slow > 3) {
         if (G.gov_since_up && G.gov_since_up < 1800) G.gov_floor = level + 1; /* (it went up too soon) */
         level++;
-      } else if (!G.gov_slow && level > G.gov_floor) {
+      } else if (!G.gov_slow && level > G.gov_floor && level > gov_best()) {
         level--, G.gov_since_up = 1;
       }
       G.gov_frames = G.gov_slow = 0;
@@ -4015,6 +4026,11 @@ void app_frame(float dt) {
   double frame_start = now_ms();
   G.frame_start = frame_start;
   if (G.blended) G.car = G.car_real, G.blended = 0; /* what the race goes on from */
+  /* (from before a race's first frame, which would otherwise build its targets at level 0) */
+  if (G.console && G.gov_level < gov_best() && !getenv("WMMT_HQ_LEVEL")) {
+    G.gov_level = render_hq_level(gov_best());
+    if (G.perf) fprintf(G.perf, "%7.2fs render_hq level %d (fast display, %d Hz)\n", G.race_time, G.gov_level, display_hz);
+  }
   anm_trim();
   if (dt > 0.1f) dt = 0.1f;
   if (dt > 0) G.fps += (1.0f / dt - G.fps) * 0.05f;

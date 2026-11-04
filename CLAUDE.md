@@ -65,6 +65,7 @@ Some header comments have drifted, so treat them as a starting point:
 - Compile with `-ffp-contract=off` and `-DRC_FPT=double`. Every file that includes `rc_runtime.h` must use the same `RC_FPT`, because the default on x86 is `long double`.
 - `car_update` is exactly one 60 Hz arcade frame and takes no `dt`. `app_frame` rounds its `dt` to a count of vsyncs and steps that many times.
 - Above 60 Hz (`app_refresh`, which Android calls with the display's real rate), `race_ticks` still gives 60 ticks a second, and `car_blend` draws poses between the last two ticks into `G.car`, restored from `G.car_real` at the top of the next `app_frame`. Physics, input (`hud_input`) and `snd_update` run only on ticks. Anything in the race that counts draw calls instead of ticks runs at double speed on a 120 Hz display.
+- Above 60 Hz the quality governor starts at and never climbs above `render_hq` level 5 (`GOV_FAST_BEST`, from a benchmark on one tablet), and can still step down.
 - `WMMT_HZ=120` on `test/menushot.c` runs a 120 Hz display on desktop. A race there must match the 60 Hz run's positions at tick k (its frame 2k against the 60 Hz run's frame k).
 - World units are 0.1 m, with +y up.
 
