@@ -1917,6 +1917,33 @@ static void draw_option_res(const menu_state *m, float screen_w, float screen_h)
   hud_ui_end();
 }
 
+/* Android's FPS row (hq_rows, the port's): on the GRAPHICS band, in line with the right column's
+ * label and its ON and OFF */
+#define OPT_FPS_Y 263.0f
+#define OPT_FPS_ROW 5
+#define OPT_FPS_INSET 1.5f /* (the pre-rendered words' own margin, which hud_ui_text has not) */
+static const int OPT_FPS[2] = { 60, 120 };
+static void option_fps_step(menu_state *m) {
+  if (!m->hq_rows || m->tap_y < OPT_FPS_Y - OPT_GRAPHICS_HALF || m->tap_y >= OPT_FPS_Y + OPT_GRAPHICS_HALF) return;
+  float x[2];
+  option_hq_chips(OPT_FPS_ROW, x);
+  int k = (int)floorf((m->tap_x - x[0] + SET_CHIP_GAP * 0.5f) / (x[1] - x[0]));
+  if (k >= 0 && k < 2) option_set(m, &m->fps, OPT_FPS[k]);
+}
+
+static void draw_option_fps(const menu_state *m, float screen_w, float screen_h) {
+  float x[2], k = 1.6f, top = OPT_FPS_Y * k - 3.5f * OPT_RES_PX;
+  option_hq_chips(OPT_FPS_ROW, x);
+  hud_ui_begin(screen_w, screen_h);
+  hud_ui_text("FPS", (OPT_HQ_ROW[OPT_FPS_ROW].x + OPT_FPS_INSET) * k, top, OPT_RES_PX, 1, 1, 1, 1);
+  for (int i = 0; i < 2; ++i) {
+    char s[4];
+    snprintf(s, sizeof s, "%d", OPT_FPS[i]);
+    hud_ui_text(s, (x[i] + OPT_FPS_INSET) * k, top, OPT_RES_PX, 1, 1, 1, m->fps == OPT_FPS[i] ? 1.0f : 0.3f);
+  }
+  hud_ui_end();
+}
+
 /* ---- the OPTION screen's KEY LAYOUT (MENU_LAYOUT, Allan 10-29: the touch keys' size and
  * place the player's own): the race's keys over the screen as they will be, a group dragged
  * by a finger moves (kept on the screen), the panel's - and + size the chosen group, RESET ALL
@@ -2184,6 +2211,7 @@ static void option_step(menu_state *m, int tap, int key) {
   k = m->hq_rows ? -1 : option_chip(m, O_ON, OPT_BM_Y);
   if (k >= 0) option_set(m, &m->bm_on, !k);
   option_res_step(m);
+  option_fps_step(m);
   /* a light of the gauge: that sensitivity */
   if (m->gyro == HUD_STEER_GYRO && m->tap_y >= OPT_SENS_Y - OPT_ROW_HALF && m->tap_y < OPT_SENS_Y + OPT_ROW_HALF) {
     int i = (int)floorf((m->tap_x - OPT_CHIP_X) / OPT_LIGHT_DX);
@@ -5360,6 +5388,7 @@ void menu_init(menu_state *m) {
   /* (a pad's sticks rest a little off centre) */
   m->pad_stick_dead = 12, m->pad_trigger_dead = 4, m->pad_rumble = 2;
   m->pad_shift_dead = 50;
+  m->fps = 120;
   m->poem = -1;
   /* (the SSAO off: its 20 ms on the Mi 6 cost the 60 fps) */
   m->hd_tex = 1, m->bloom_on = 1, m->ssao_on = 0, m->wet_on = 1, m->paint_on = 1, m->aa4 = 1;
@@ -9387,6 +9416,7 @@ void menu_draw(const menu_state *m, float screen_w, float screen_h, void (*draw3
     if (m->t < FADE) fade = (float)(m->t + 1) / FADE;
     draw_option(m, clock, bars);
     if (m->res_row) draw_option_res(m, screen_w, screen_h);
+    if (m->hq_rows) draw_option_fps(m, screen_w, screen_h);
     draw_option_key(screen_w, screen_h, OPT_LAYOUT_KEY, "KEY LAYOUT >");
     if (m->pad_on) draw_option_key(screen_w, screen_h, OPT_PAD_KEY, "CONTROLLER >");
     draw_option_steer(m);

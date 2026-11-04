@@ -912,7 +912,7 @@ static int options_load(void) {
       G.menu.key_dy[g] = lay[g * 3 + 2] < -2000 || lay[g * 3 + 2] > 2000 ? 0 : lay[g * 3 + 2];
     }
   /* the testers' story switch (menu.h story_test), a third line */
-  int test = 0, traffic = 0, pd[6], ps[2];
+  int test = 0, traffic = 0, pd[6], ps[2], fps;
   if (n >= 3 && fscanf(f, " test %d", &test) == 1) G.menu.story_test = test >= 0 && test <= 10 ? test : 0;
   if (n >= 3 && fscanf(f, " traffic %d", &traffic) == 1) G.menu.ta_traffic = traffic != 0;
   /* the CONTROLLER screen's (menu.c MENU_PAD) */
@@ -926,6 +926,7 @@ static int options_load(void) {
     G.menu.pad_shift = ps[0] != 0;
     if (ps[1] >= MENU_PAD_SHIFT_DEAD_MIN && ps[1] <= MENU_PAD_SHIFT_DEAD_MAX) G.menu.pad_shift_dead = ps[1];
   }
+  if (n >= 3 && fscanf(f, " fps %d", &fps) == 1) G.menu.fps = fps == 60 ? 60 : 120;
   fclose(f);
   if (n < 3) return 0;
   G.menu.hires = hires != 0;
@@ -942,8 +943,8 @@ static int options_load(void) {
 }
 
 static void options_save(void) {
-  static int last[33] = { -1 };
-  int now[33] = { G.menu.gyro, G.menu.gyro_sens, G.menu.over_on, G.menu.sharp_on, G.menu.pedal_slide, G.menu.ao_on,
+  static int last[34] = { -1 };
+  int now[34] = { G.menu.gyro, G.menu.gyro_sens, G.menu.over_on, G.menu.sharp_on, G.menu.pedal_slide, G.menu.ao_on,
                   G.menu.bm_on, G.menu.hd_tex, G.menu.bloom_on, G.menu.ssao_on, G.menu.wet_on, G.menu.paint_on,
                   G.menu.aa4, G.menu.hires };
   for (int g = 0; g < 3; ++g)
@@ -953,6 +954,7 @@ static void options_save(void) {
   for (int k = 0; k < 3; ++k) now[25 + k] = G.menu.pad_digital[k];
   now[28] = G.menu.pad_stick_dead, now[29] = G.menu.pad_trigger_dead, now[30] = G.menu.pad_rumble;
   now[31] = G.menu.pad_shift, now[32] = G.menu.pad_shift_dead;
+  now[33] = G.menu.fps;
   if (G.options_global && !memcmp(now, last, sizeof now)) return;
   char path[1100];
   snprintf(path, sizeof path, "%s/option", G.save_dir);
@@ -966,6 +968,7 @@ static void options_save(void) {
   fprintf(f, "traffic %d\n", now[24]);
   fprintf(f, "pad %d %d %d %d %d %d\n", now[25], now[26], now[27], now[28], now[29], now[30]);
   fprintf(f, "shift %d %d\n", now[31], now[32]);
+  fprintf(f, "fps %d\n", now[33]);
   fclose(f);
   memcpy(last, now, sizeof last);
   G.options_global = 1;
@@ -4164,6 +4167,8 @@ static void eye_in(const mat4 *m, const float *p, float *out) {
 void app_refresh(float hz) {
   display_hz = hz > 1.0f ? (int)(hz + 0.5f) : 60;
 }
+
+int app_fps(void) { return G.menu.fps; }
 
 /* How many arcade frames (always 60 Hz: car_update is exactly one) are due this display frame.
  * Above 60 Hz: the vsyncs by dt, keeping what rounding left over so that jitter neither gains

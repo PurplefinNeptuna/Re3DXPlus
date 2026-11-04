@@ -206,21 +206,27 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback, Se
   }
 
   @Override public void surfaceCreated(SurfaceHolder h) {}
-  /* the fastest refresh the display has at this size (the race draws between the arcade's 60 Hz
-   * frames), and the native side told what it really runs at: battery saver and the system's
-   * motion smoothness setting can hold it at 60 */
-  private void askFastest(Surface s) {
+  /* the OPTION screen's FPS (the game's thread tells it, app_fps) */
+  private int wantFps = 120;
+
+  /* the slowest refresh the display has at this size that reaches wantFps, else its fastest (above
+   * 60 the race draws between the arcade's 60 Hz frames), and the native side told what it really
+   * runs at: battery saver and the system's motion smoothness setting can hold it at 60 */
+  private void askRate() {
+    Surface s = game.getHolder().getSurface();
     Display d = getWindowManager().getDefaultDisplay();
     Display.Mode now = d.getMode(), best = now;
+    float want = wantFps - 1; /* (a 59.94 Hz mode is a 60) */
     for (Display.Mode m : d.getSupportedModes())
       if (m.getPhysicalWidth() == now.getPhysicalWidth() && m.getPhysicalHeight() == now.getPhysicalHeight()
-          && m.getRefreshRate() > best.getRefreshRate()) best = m;
+          && (best.getRefreshRate() < want ? m.getRefreshRate() > best.getRefreshRate()
+                                           : m.getRefreshRate() >= want && m.getRefreshRate() < best.getRefreshRate())) best = m;
     WindowManager.LayoutParams a = getWindow().getAttributes();
     if (a.preferredDisplayModeId != best.getModeId()) {
       a.preferredDisplayModeId = best.getModeId();
       getWindow().setAttributes(a);
     }
-    if (s != null && android.os.Build.VERSION.SDK_INT >= 30)
+    if (s.isValid() && android.os.Build.VERSION.SDK_INT >= 30)
       s.setFrameRate(best.getRefreshRate(), Surface.FRAME_RATE_COMPATIBILITY_FIXED_SOURCE);
     nativeRefresh(d.getRefreshRate());
   }
@@ -230,7 +236,7 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback, Se
   @Override public void onDisplayChanged(int id) { nativeRefresh(getWindowManager().getDefaultDisplay().getRefreshRate()); }
 
   @Override public void surfaceChanged(SurfaceHolder h, int fmt, int w, int ht) {
-    askFastest(h.getSurface());
+    askRate();
     nativeSurface(h.getSurface(), w, ht);
   }
   @Override public void surfaceDestroyed(SurfaceHolder h) { nativeSurface(null, 0, 0); }
@@ -279,6 +285,13 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback, Se
   void padRumble(final int ms, final int amp) {
     runOnUiThread(() -> {
       if (padMotors != null) padMotors.vibrate(android.os.VibrationEffect.createOneShot(ms, amp));
+    });
+  }
+
+  void setFps(final int fps) {
+    runOnUiThread(() -> {
+      wantFps = fps;
+      askRate();
     });
   }
 

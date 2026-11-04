@@ -35,7 +35,7 @@ typedef struct { int id, phase; float x, y; } touch_ev;
 static struct {
   JavaVM *vm;
   jobject activity;
-  jmethodID show_movie, play_bgm, bgm_level, fail, pad_rumble;
+  jmethodID show_movie, play_bgm, bgm_level, fail, pad_rumble, set_fps;
   char data_dir[512], save_dir[512];
   pthread_mutex_t mx;
   pthread_cond_t cv;
@@ -145,6 +145,12 @@ static void sync_movie(void) {
     level = l;
     JNIEnv *env = env_here();
     (*env)->CallVoidMethod(env, A.activity, A.bgm_level, (jfloat)l);
+  }
+  static int fps = 120; /* (MainActivity's wantFps until told) */
+  if (app_fps() != fps) {
+    fps = app_fps();
+    JNIEnv *env = env_here();
+    (*env)->CallVoidMethod(env, A.activity, A.set_fps, (jint)fps);
   }
 }
 
@@ -379,6 +385,7 @@ JNIEXPORT void JNICALL JFN(nativeStart)(JNIEnv *env, jclass cls, jobject activit
   A.bgm_level = (*env)->GetMethodID(env, cls, "bgmLevel", "(F)V");
   A.fail = (*env)->GetMethodID(env, cls, "fail", "(Ljava/lang/String;)V");
   A.pad_rumble = (*env)->GetMethodID(env, cls, "padRumble", "(II)V");
+  A.set_fps = (*env)->GetMethodID(env, cls, "setFps", "(I)V");
   const char *d = (*env)->GetStringUTFChars(env, data, NULL), *s = (*env)->GetStringUTFChars(env, save, NULL);
   snprintf(A.data_dir, sizeof A.data_dir, "%s", d);
   snprintf(A.save_dir, sizeof A.save_dir, "%s", s);

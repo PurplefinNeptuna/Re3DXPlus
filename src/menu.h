@@ -166,6 +166,8 @@ typedef struct {
    * occlusion, the wet road, the paint's reflection and the anti-aliasing (4x 1, 2x 0, from
    * the next start) */
   int hq_rows, hd_tex, bloom_on, ssao_on, wet_on, paint_on, aa4;
+  /* and the display's rate, 60 or 120 (app_fps; the race's physics stays 60 Hz either way) */
+  int fps;
   /* and on an iPad (res_row, set by the app), the screen's resolution: 1024x768 (0) or the
    * Retina iPads' 2048x1536 (1), from the next start (main.m reads it from the options) */
   int res_row, hires, res_phone;
