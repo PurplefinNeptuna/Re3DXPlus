@@ -23,6 +23,7 @@
 #include <unistd.h>
 
 #include "app.h"
+#include "menu.h"
 #include "gl.h"
 #include "sound.h"
 
@@ -50,6 +51,8 @@ static struct {
    * press and release between two frames still counts */
   int pad_on, pad_buttons, pad_latch;
   float pad_axis[6];
+  int pad_axes, pad_axis_id[MENU_PAD_AXES];
+  float pad_axis_v[3 * MENU_PAD_AXES];
   /* the game thread's own */
 #ifdef WMMT_VK
   int vk_up, have_surface;
@@ -290,7 +293,8 @@ static void *game(void *arg) {
   for (;;) {
     touch_ev tv[TOUCH_MAX];
     int nt, press, done, warn, tilt_new;
-    float tilt, pad_axis[6];
+    float tilt, pad_axis[6], axis_v[3 * MENU_PAD_AXES];
+    int axes, axis_id[MENU_PAD_AXES];
     int pad_on, pad_buttons;
     pthread_mutex_lock(&A.mx);
     while (A.paused || (!A.window && !A.window_changed)) {
@@ -316,6 +320,9 @@ static void *game(void *arg) {
     pad_on = A.pad_on, pad_buttons = A.pad_buttons | A.pad_latch;
     A.pad_latch = 0;
     memcpy(pad_axis, A.pad_axis, sizeof pad_axis);
+    axes = A.pad_axes;
+    memcpy(axis_id, A.pad_axis_id, sizeof axis_id);
+    memcpy(axis_v, A.pad_axis_v, sizeof axis_v);
     pthread_mutex_unlock(&A.mx);
     if (!SURFACE_UP) continue;
     if (!A.started) {
@@ -341,6 +348,7 @@ static void *game(void *arg) {
     double now = now_s();
     float dt = last > 0 ? (float)(now - last) : 1.0f / 30.0f;
     last = now;
+    app_pad_axes(axes, axis_id, axis_v);
     app_pad(dt, pad_on, pad_buttons, pad_axis[0], pad_axis[1], pad_axis[2], pad_axis[3], pad_axis[4], pad_axis[5]);
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
     app_frame(dt);
@@ -439,6 +447,19 @@ JNIEXPORT void JNICALL JFN(nativePad)(JNIEnv *env, jclass cls, jint on, jint but
   A.pad_buttons = buttons;
   A.pad_latch |= buttons;
   A.pad_axis[0] = lx, A.pad_axis[1] = ly, A.pad_axis[2] = rx, A.pad_axis[3] = ry, A.pad_axis[4] = lt, A.pad_axis[5] = rt;
+  pthread_mutex_unlock(&A.mx);
+}
+
+JNIEXPORT void JNICALL JFN(nativePadAxes)(JNIEnv *env, jclass cls, jint n, jintArray id, jfloatArray v) {
+  if (n < 0 || n > MENU_PAD_AXES) return;
+  int ids[MENU_PAD_AXES];
+  float vs[3 * MENU_PAD_AXES];
+  (*env)->GetIntArrayRegion(env, id, 0, n, ids);
+  (*env)->GetFloatArrayRegion(env, v, 0, 3 * n, vs);
+  pthread_mutex_lock(&A.mx);
+  A.pad_axes = n;
+  memcpy(A.pad_axis_id, ids, (size_t)n * sizeof *ids);
+  memcpy(A.pad_axis_v, vs, (size_t)(3 * n) * sizeof *vs);
   pthread_mutex_unlock(&A.mx);
 }
 

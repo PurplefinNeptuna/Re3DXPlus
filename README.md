@@ -176,14 +176,18 @@ On Android a connected controller hides the race's touch keys and the menus' arr
 | Right stick | | Move the cursor |
 | A | Shift up | Decide, or tap at the cursor while it is showing |
 | B | | Back |
-| Y | Change view | Gear, bin or wheel key; next song on the time zone screen |
+| Y | Change view | Gear, bin or wheel key; next song on the time zone screen; next colour on the wheel and sticker screens |
 | X | Shift down | Hidden Cars, All Parts or omakase key |
 | RT / LT | Throttle / brake | |
 | LB | AT / MT | |
 | Start | Pause | Same as A |
 | Select | Reset the car | |
 
-The save, name, OPTION, CONTROLLER, Key Layout, card setting and versus screens have no single selected item, so the cursor is always shown there. While a controller is connected, the OPTION screen has a CONTROLLER key. It sets steering, throttle and brake to analog (follows how far you press) or digital (1 or 0, on past half way), the stick and trigger dead zones, and rumble (off, low, medium or high). Rumble pulses on crashes and wall scrapes, on controllers that have motors. The stick's dead zone also applies to the cursor.
+The save, name, OPTION, CONTROLLER, Key Layout, card setting and versus screens have no single selected item, so the cursor is always shown there. While a controller is connected, the OPTION screen has a CONTROLLER key. It sets steering, throttle and brake to analog (follows how far you press) or digital (1 or 0, on past half way), the stick and trigger dead zones and end positions, and rumble (off, low, medium or high). Rumble pulses on crashes and wall scrapes, on controllers that have motors. The stick's dead zone also applies to the cursor.
+
+An end position is how far a stick or trigger must go to count as all the way: Trigger End defaults to 80 because many triggers stop short of their full value, Stick End to 100. In analog, the throttle starts at 0.20, the first value the arcade's physics responds to just above, so the first part of a press is not wasted.
+
+The CONTROLLER screen's TEST key shows what the controller sends and what the settings make of it: each stick and trigger's raw value, which settings never change, marked with its dead zone (dimmed) and end (white tick), then its result, the steering, throttle and brake being what the car gets; the buttons; and every axis the device reports with its range. Only holding Start and Select together leaves it, so every other control can be tried; it also closes if the controller disconnects.
 
 Right Stick Shift (off by default) makes the right stick a gear lever in races, in MT only. On cars with up to 4 gears: 1 top left, 2 bottom left, 3 top right, 4 bottom right. On 5 and 6 gears: 1 top left, 2 bottom left, 3 up, 4 down, 5 top right, 6 bottom right. A gear selects once the stick is past Shift Deadzone (default 50) and stays selected when the stick is let go.
 

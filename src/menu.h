@@ -12,6 +12,8 @@
 
 /* The race's pause menu: the arcade's continue dialog (clSeqContinueThread: "Continue?" over
  * the YES and NO cards of the time zone select's spin box) in a box over the race. */
+#define MENU_PAD_AXES 16
+
 typedef struct {
   int open;        /* frames since it opened, 0 = closed */
   int sel;         /* the card at rest: 0 YES (back to the race), 1 NO (back to the menus) */
@@ -200,9 +202,19 @@ typedef struct {
    * (percent, 0..MENU_PAD_DEAD_MAX), the motors (0 off .. 3); from the app whether one is
    * connected and has motors; pad_test asks a pulse of them */
   int pad_digital[3], pad_stick_dead, pad_trigger_dead, pad_rumble;
+  /* where each counts as all the way (percent, MENU_PAD_END_MIN..100): a trigger may stop short of 1 */
+  int pad_stick_end, pad_trigger_end;
   /* and the right stick as the race's gear lever, past its own dead zone (percent) */
   int pad_shift, pad_shift_dead;
   int pad_on, pad_motors, pad_test;
+  int pad_test_exit; /* the app: Start and Select held, the only way out of MENU_PAD_TEST */
+  /* the screen MENU_PAD_TEST's, from the app: the buttons, the pad as read (lx ly rx ry lt rt), what
+   * the settings make of it (steer, throttle, brake as the car is given them; ly rx ry), and every axis the device reports: its Android AXIS_*
+   * number and value, min, max */
+  int pad_view_buttons;
+  float pad_view_read[6], pad_view_out[6];
+  int pad_axes, pad_axis_id[MENU_PAD_AXES];
+  float pad_axis_v[MENU_PAD_AXES][3];
   int lay_sel, lay_drag, lay_tap;
   void *lay_touch;
   float lay_x, lay_y;
@@ -447,7 +459,7 @@ enum { MENU_MOVIE, MENU_TITLE, MENU_RANKING, MENU_LOGO, MENU_PROLOGUE, MENU_STAR
        MENU_ST_LEVEL, MENU_ST_RIVAL, MENU_PRE, MENU_ST_TUNE, MENU_TEN_COURSE, MENU_TEN_LEVEL,
        MENU_TG_GET, MENU_TG_AERO, MENU_TG_PART, MENU_TG_WEAR, MENU_OPTION, MENU_SAVE, MENU_HAVE, MENU_GARAGE,
        MENU_CARD, MENU_LVUP, MENU_ST_EFF, MENU_TG_WHEEL, MENU_TG_SELECT, MENU_TG_MAKER, MENU_NAME,
-       MENU_TG_VINYL, MENU_VS, MENU_VS_SEL, MENU_VS_AREA, MENU_VS_MATCH, MENU_SHOGO, MENU_VS_STAR, MENU_INFO, MENU_LAYOUT, MENU_POEM, MENU_BONUS, MENU_CARDSET, MENU_PAD };
+       MENU_TG_VINYL, MENU_VS, MENU_VS_SEL, MENU_VS_AREA, MENU_VS_MATCH, MENU_SHOGO, MENU_VS_STAR, MENU_INFO, MENU_LAYOUT, MENU_POEM, MENU_BONUS, MENU_CARDSET, MENU_PAD, MENU_PAD_TEST };
 enum { MENU_GAME_STORY, MENU_GAME_TEN, MENU_GAME_TA, MENU_GAME_VS };
 
 /* The cars the car select shows in 3D this frame (the carousel, or the colour turntable),
@@ -657,6 +669,8 @@ void menu_pad_back(menu_state *m);
 enum { MENU_PAD_OK = 1, MENU_PAD_MOVE, MENU_PAD_RESUME };
 enum { MENU_PAD_STEER, MENU_PAD_THROTTLE, MENU_PAD_BRAKE };
 #define MENU_PAD_DEAD_MAX 50
+#define MENU_PAD_END_MIN 60 /* (above the dead zones' most: never a zero range) */
+#define MENU_PAD_END_MAX 100
 #define MENU_PAD_RUMBLE_MAX 3
 #define MENU_PAD_SHIFT_DEAD_MIN 20
 #define MENU_PAD_SHIFT_DEAD_MAX 90

@@ -927,6 +927,11 @@ static int options_load(void) {
     if (ps[1] >= MENU_PAD_SHIFT_DEAD_MIN && ps[1] <= MENU_PAD_SHIFT_DEAD_MAX) G.menu.pad_shift_dead = ps[1];
   }
   if (n >= 3 && fscanf(f, " fps %d", &fps) == 1) G.menu.fps = fps == 60 ? 60 : 120;
+  int pe[2];
+  if (n >= 3 && fscanf(f, " padend %d %d", &pe[0], &pe[1]) == 2) {
+    if (pe[0] >= MENU_PAD_END_MIN && pe[0] <= MENU_PAD_END_MAX) G.menu.pad_stick_end = pe[0];
+    if (pe[1] >= MENU_PAD_END_MIN && pe[1] <= MENU_PAD_END_MAX) G.menu.pad_trigger_end = pe[1];
+  }
   fclose(f);
   if (n < 3) return 0;
   G.menu.hires = hires != 0;
@@ -943,8 +948,8 @@ static int options_load(void) {
 }
 
 static void options_save(void) {
-  static int last[34] = { -1 };
-  int now[34] = { G.menu.gyro, G.menu.gyro_sens, G.menu.over_on, G.menu.sharp_on, G.menu.pedal_slide, G.menu.ao_on,
+  static int last[36] = { -1 };
+  int now[36] = { G.menu.gyro, G.menu.gyro_sens, G.menu.over_on, G.menu.sharp_on, G.menu.pedal_slide, G.menu.ao_on,
                   G.menu.bm_on, G.menu.hd_tex, G.menu.bloom_on, G.menu.ssao_on, G.menu.wet_on, G.menu.paint_on,
                   G.menu.aa4, G.menu.hires };
   for (int g = 0; g < 3; ++g)
@@ -955,6 +960,7 @@ static void options_save(void) {
   now[28] = G.menu.pad_stick_dead, now[29] = G.menu.pad_trigger_dead, now[30] = G.menu.pad_rumble;
   now[31] = G.menu.pad_shift, now[32] = G.menu.pad_shift_dead;
   now[33] = G.menu.fps;
+  now[34] = G.menu.pad_stick_end, now[35] = G.menu.pad_trigger_end;
   if (G.options_global && !memcmp(now, last, sizeof now)) return;
   char path[1100];
   snprintf(path, sizeof path, "%s/option", G.save_dir);
@@ -969,6 +975,7 @@ static void options_save(void) {
   fprintf(f, "pad %d %d %d %d %d %d\n", now[25], now[26], now[27], now[28], now[29], now[30]);
   fprintf(f, "shift %d %d\n", now[31], now[32]);
   fprintf(f, "fps %d\n", now[33]);
+  fprintf(f, "padend %d %d\n", now[34], now[35]);
   fclose(f);
   memcpy(last, now, sizeof last);
   G.options_global = 1;
@@ -1506,6 +1513,7 @@ void app_touch(void *id, int phase, float x, float y) {
 /* ---- the controller: the race's wheel and pedals through hud_pad; the menus' left/right keys,
  * back and decide directly, and a cursor whose A is a touch for what has no one item chosen ---- */
 #define PAD_DIGITAL_AT 0.5f /* a digital steering or pedal: full past half way */
+#define PAD_GAS_START 0.2f /* the physics ignores clGameInput's throttle up to here (measured: 0.21 is the first to act), so a press starts past it */
 #define PAD_CURSOR_SPEED 900.0f /* layout px a second at full tilt */
 #define PAD_REPEAT_FIRST 0.35f
 #define PAD_REPEAT 0.15f
@@ -1521,23 +1529,28 @@ static struct {
   float rumble;
 } pad = { .screen = -1 };
 
-static float pad_dead(float v, float dead) {
+/* a stick or trigger: 0 up to its dead zone, 1 from its end, in a line between */
+static float pad_range(float v, float dead, float end) {
   float a = fabsf(v);
-  a = a <= dead ? 0.0f : a >= 1.0f ? 1.0f : (a - dead) / (1.0f - dead);
+  a = a <= dead ? 0.0f : a >= end ? 1.0f : (a - dead) / (end - dead);
   return v < 0 ? -a : a;
 }
 
 static void pad_menu(float dt, int down, int step, float lx, float ly, float rx, float ry) {
   menu_state *m = &G.menu;
+  if (m->screen == MENU_PAD_TEST) { /* the test shows them all, so none acts, and no cursor */
+    if ((pad.held & (PAD_START | PAD_SELECT)) == (PAD_START | PAD_SELECT)) m->pad_test_exit = 1;
+    return;
+  }
   int free_screen = menu_pad_free(m);
-  float dead = (float)m->pad_stick_dead * 0.01f;
+  float dead = (float)m->pad_stick_dead * 0.01f, end = (float)m->pad_stick_end * 0.01f;
   if (m->screen != pad.screen) {
     pad.screen = m->screen;
     pad.shown = free_screen;
     pad.x = 512.0f, pad.y = 384.0f;
   }
-  float mx = pad_dead(rx, dead) + (free_screen ? pad_dead(lx, dead) : 0.0f);
-  float my = pad_dead(ry, dead) + (free_screen ? pad_dead(ly, dead) : 0.0f);
+  float mx = pad_range(rx, dead, end) + (free_screen ? pad_range(lx, dead, end) : 0.0f);
+  float my = pad_range(ry, dead, end) + (free_screen ? pad_range(ly, dead, end) : 0.0f);
   if (mx != 0.0f || my != 0.0f) {
     pad.shown = 1;
     /* (squared: a slight tilt finds a small button, a full one crosses the screen) */
@@ -1582,14 +1595,22 @@ void app_pad(float dt, int on, int buttons, float lx, float ly, float rx, float 
   }
   int dpad = (buttons & PAD_RIGHT ? 1 : 0) - (buttons & PAD_LEFT ? 1 : 0);
   const menu_state *ms = &G.menu;
-  float trigger_dead = (float)ms->pad_trigger_dead * 0.01f;
+  float trigger_dead = (float)ms->pad_trigger_dead * 0.01f, trigger_end = (float)ms->pad_trigger_end * 0.01f;
   float steer = ms->pad_digital[MENU_PAD_STEER] ? (lx < -PAD_DIGITAL_AT ? -1.0f : lx > PAD_DIGITAL_AT ? 1.0f : 0.0f)
-                                                : pad_dead(lx, (float)ms->pad_stick_dead * 0.01f);
-  float gas = ms->pad_digital[MENU_PAD_THROTTLE] ? (rt > PAD_DIGITAL_AT ? 1.0f : 0.0f) : pad_dead(rt, trigger_dead);
-  float brake = ms->pad_digital[MENU_PAD_BRAKE] ? (lt > PAD_DIGITAL_AT ? 1.0f : 0.0f) : pad_dead(lt, trigger_dead);
+                                                : pad_range(lx, (float)ms->pad_stick_dead * 0.01f, (float)ms->pad_stick_end * 0.01f);
+  float gas = ms->pad_digital[MENU_PAD_THROTTLE] ? (rt > PAD_DIGITAL_AT ? 1.0f : 0.0f) : pad_range(rt, trigger_dead, trigger_end);
+  float brake = ms->pad_digital[MENU_PAD_BRAKE] ? (lt > PAD_DIGITAL_AT ? 1.0f : 0.0f) : pad_range(lt, trigger_dead, trigger_end);
+  if (gas > 0.0f) gas = PAD_GAS_START + (1.0f - PAD_GAS_START) * gas;
   /* (digital steering, and the d-pad: as the touch keys, car_update ramping it) */
-  hud_pad(on, dpad ? (float)dpad : steer, !dpad && !ms->pad_digital[MENU_PAD_STEER], buttons & PAD_RT ? 1.0f : gas,
-          buttons & PAD_LT ? 1.0f : brake);
+  steer = dpad ? (float)dpad : steer;
+  if (buttons & PAD_RT) gas = 1.0f;
+  if (buttons & PAD_LT) brake = 1.0f;
+  hud_pad(on, steer, !dpad && !ms->pad_digital[MENU_PAD_STEER], gas, brake);
+  G.menu.pad_view_buttons = buttons;
+  memcpy(G.menu.pad_view_read, (float[6]){ lx, ly, rx, ry, lt, rt }, sizeof G.menu.pad_view_read);
+  float stick_dead = (float)ms->pad_stick_dead * 0.01f, stick_end = (float)ms->pad_stick_end * 0.01f;
+  memcpy(G.menu.pad_view_out, (float[6]){ steer, gas, brake, pad_range(ly, stick_dead, stick_end), pad_range(rx, stick_dead, stick_end),
+                                          pad_range(ry, stick_dead, stick_end) }, sizeof G.menu.pad_view_out);
   if (!on) {
     pad.shown = 0, pad.screen = -1;
     return;
@@ -1630,6 +1651,12 @@ void app_pad(float dt, int on, int buttons, float lx, float ly, float rx, float 
       else if (g != pad.gear_sent && (pad.gear_t += dt) >= PAD_GEAR_HOLD) hud_pad_gear(pad.gear_sent = g);
     }
   }
+}
+
+void app_pad_axes(int n, const int *id, const float *v) {
+  G.menu.pad_axes = n;
+  memcpy(G.menu.pad_axis_id, id, (size_t)n * sizeof *id);
+  memcpy(G.menu.pad_axis_v, v, (size_t)n * sizeof G.menu.pad_axis_v[0]);
 }
 
 /* a race tick, before snd_update takes impact: the hits' pulses, by the level of their sounds

@@ -2084,15 +2084,18 @@ static void draw_option_key(float screen_w, float screen_h, const float *r, cons
 
 /* ---- the OPTION screen's CONTROLLER (MENU_PAD, the port's; while one is connected): a panel of
  * rows in layout px, each its label and its keys ---- */
-enum { PR_STEER, PR_THROTTLE, PR_BRAKE, PR_STICK, PR_TRIGGER, PR_RUMBLE, PR_SHIFT, PR_SHIFT_DEAD, PAD_ROWS };
-static const float PAD_PANEL[4] = { 80, 120, 864, 540 };
+enum { PR_STEER, PR_THROTTLE, PR_BRAKE, PR_STICK, PR_STICK_END, PR_TRIGGER, PR_TRIGGER_END, PR_RUMBLE, PR_SHIFT, PR_SHIFT_DEAD, PAD_ROWS };
+static const float PAD_PANEL[4] = { 80, 40, 864, 640 };
+/* (clear of hud.c's MENU_BACK, 722..806 x 46..106, whose touches count even with the key hidden) */
+static const float PAD_TEST_KEY[4] = { 812, 48, 116, 34 };
 #define PAD_ROW_X 440.0f
-#define PAD_ROW_Y 168.0f
-#define PAD_ROW_DY 60.0f
-#define PAD_ROW_H 48.0f
+#define PAD_ROW_Y 108.0f
+#define PAD_ROW_DY 54.0f
+#define PAD_ROW_H 44.0f
 
 static int pad_keys(int row) { return row == PR_RUMBLE ? MENU_PAD_RUMBLE_MAX + 1 : 2; }
-static int pad_dead_row(int row) { return row == PR_STICK || row == PR_TRIGGER || row == PR_SHIFT_DEAD; }
+static int pad_end_row(int row) { return row == PR_STICK_END || row == PR_TRIGGER_END; }
+static int pad_dead_row(int row) { return row == PR_STICK || row == PR_TRIGGER || row == PR_SHIFT_DEAD || pad_end_row(row); }
 
 /* key k of a row: the two choices wide, the dead zone's - and + at its ends, the motors' four */
 static void pad_key_rect(int row, int k, float r[4]) {
@@ -2109,6 +2112,12 @@ static void pad_step(menu_state *m, int tap, int back) {
   }
   if (!tap) return;
   float x = m->tap_x * 1.6f, y = m->tap_y * 1.6f;
+  const float *t = PAD_TEST_KEY;
+  if (x >= t[0] && x < t[0] + t[2] && y >= t[1] && y < t[1] + t[3]) {
+    snd_menu(SND_SELECT);
+    go(m, MENU_PAD_TEST);
+    return;
+  }
   for (int row = 0; row < PAD_ROWS; ++row)
     for (int k = 0; k < pad_keys(row); ++k) {
       float r[4];
@@ -2125,6 +2134,11 @@ static void pad_step(menu_state *m, int tap, int back) {
         int to = m->pad_shift_dead + (k ? 5 : -5);
         if (to < MENU_PAD_SHIFT_DEAD_MIN || to > MENU_PAD_SHIFT_DEAD_MAX) return;
         m->pad_shift_dead = to;
+      } else if (pad_end_row(row)) {
+        int *v = row == PR_STICK_END ? &m->pad_stick_end : &m->pad_trigger_end;
+        int to = *v + (k ? 2 : -2);
+        if (to < MENU_PAD_END_MIN || to > MENU_PAD_END_MAX) return;
+        *v = to;
       } else {
         int *v = row == PR_STICK ? &m->pad_stick_dead : &m->pad_trigger_dead;
         int to = *v + (k ? 2 : -2);
@@ -2138,7 +2152,7 @@ static void pad_step(menu_state *m, int tap, int back) {
 }
 
 static void draw_pad(const menu_state *m, int clock, float screen_w, float screen_h) {
-  static const char *const LABEL[PAD_ROWS] = { "STEERING", "THROTTLE", "BRAKE", "STICK DEADZONE", "TRIGGER DEADZONE", "RUMBLE",
+  static const char *const LABEL[PAD_ROWS] = { "STEERING", "THROTTLE", "BRAKE", "STICK DEADZONE", "STICK END", "TRIGGER DEADZONE", "TRIGGER END", "RUMBLE",
                                                 "RIGHT STICK SHIFT", "SHIFT DEADZONE" };
   static const char *const INPUT[2] = { "ANALOG", "DIGITAL" }, *const DEAD[2] = { "-", "+" }, *const OFF_ON[2] = { "OFF", "ON" };
   static const char *const RUMBLE[4] = { "OFF", "LOW", "MED", "HIGH" };
@@ -2149,6 +2163,8 @@ static void draw_pad(const menu_state *m, int clock, float screen_w, float scree
   hud_ui_rect(p[0], p[1], p[2], p[3], 0.03f, 0.04f, 0.06f, 0.82f);
   hud_ui_rect(p[0], p[1], p[2], 3, 1.0f, 0.42f, 0.05f, 0.95f);
   layout_text_mid("CONTROLLER", p[1] + 14, 4, 1, 1, 1);
+  hud_ui_button(PAD_TEST_KEY[0], PAD_TEST_KEY[1], PAD_TEST_KEY[2], PAD_TEST_KEY[3], 0);
+  hud_ui_text("TEST >", PAD_TEST_KEY[0] + 0.5f * (PAD_TEST_KEY[2] - hud_ui_text_width("TEST >", 3)), PAD_TEST_KEY[1] + 6.5f, 3, 1, 1, 1, 1);
   for (int row = 0; row < PAD_ROWS; ++row) {
     float r[4];
     pad_key_rect(row, 0, r);
@@ -2164,12 +2180,100 @@ static void draw_pad(const menu_state *m, int clock, float screen_w, float scree
     }
     if (dead) {
       char v[8];
-      snprintf(v, sizeof v, "%d", row == PR_STICK ? m->pad_stick_dead : row == PR_TRIGGER ? m->pad_trigger_dead : m->pad_shift_dead);
+      snprintf(v, sizeof v, "%d", row == PR_STICK ? m->pad_stick_dead : row == PR_STICK_END ? m->pad_stick_end : row == PR_TRIGGER ? m->pad_trigger_dead
+                                  : row == PR_TRIGGER_END ? m->pad_trigger_end : m->pad_shift_dead);
       pad_key_rect(row, 0, r);
       hud_ui_text(v, r[0] + 235.0f - 0.5f * hud_ui_text_width(v, 4), r[1] + 0.5f * (PAD_ROW_H - 28.0f), 4, 1.0f, 0.55f, 0.15f, 1);
     }
   }
   if (m->pad_on && !m->pad_motors) layout_text_mid("THIS CONTROLLER HAS NO RUMBLE", p[1] + p[3] - 18, 2, 1.0f, 0.55f, 0.15f);
+  hud_ui_end();
+}
+
+/* ---- the CONTROLLER screen's TEST (MENU_PAD_TEST, the port's): what the pad sends and what the
+ * car gets of it. Every control is shown live and acts on nothing, so only Start and Select together
+ * leave, touches and the back key not at all; or the controller going, which would leave no way out ---- */
+static void pad_test_step(menu_state *m) {
+  int leave = m->pad_test_exit || !m->pad_on;
+  m->pad_test_exit = 0;
+  if (!leave) return;
+  snd_menu(SND_CANCEL);
+  go(m, MENU_PAD);
+}
+
+/* a row: its label, a bar (from the left, or from the middle when signed) and the value. A raw row
+ * (dead >= 0) also shows its settings: the dead zone dimmed and the end a white tick, as percents;
+ * dead -2: digital, which has neither; dead -1: a row of results, none */
+static void pad_test_bar(const char *label, float v, int is_signed, float y, int dead, int end) {
+  const float x = 260.0f, w = 400.0f, h = 16.0f;
+  float a = fmaxf(-1.0f, fminf(1.0f, v));
+  hud_ui_text(label, 104.0f, y + 1.0f, 2, 1, 1, 1, 1);
+  hud_ui_rect(x, y, w, h, 1, 1, 1, 0.12f);
+  if (is_signed) hud_ui_rect(x + 0.5f * (w + (a < 0 ? a * w : 0.0f)), y, 0.5f * w * fabsf(a), h, 1.0f, 0.42f, 0.05f, 0.95f);
+  else hud_ui_rect(x, y, w * fmaxf(0.0f, a), h, 1.0f, 0.42f, 0.05f, 0.95f);
+  if (dead >= 0) {
+    float o = is_signed ? x + 0.5f * w : x, k = (is_signed ? 0.5f : 1.0f) * w * 0.01f;
+    hud_ui_rect(o, y, k * (float)dead, h, 0, 0, 0, 0.6f);
+    hud_ui_rect(o + k * (float)end - 1.0f, y, 2, h, 1, 1, 1, 1);
+    if (is_signed) {
+      hud_ui_rect(o - k * (float)dead, y, k * (float)dead, h, 0, 0, 0, 0.6f);
+      hud_ui_rect(o - k * (float)end - 1.0f, y, 2, h, 1, 1, 1, 1);
+    }
+  }
+  char s[24];
+  snprintf(s, sizeof s, "%+.2f", (double)v);
+  hud_ui_text(s, x + w + 12.0f, y + 1.0f, 2, 1, 1, 1, 1);
+  if (dead == -1) return;
+  if (dead >= 0) snprintf(s, sizeof s, "DEAD %d END %d", dead, end);
+  else snprintf(s, sizeof s, "DIGITAL");
+  hud_ui_text(s, x + w + 88.0f, y + 1.0f, 2, 1.0f, 0.55f, 0.15f, 1);
+}
+
+static void draw_pad_test(const menu_state *m, int clock, float screen_w, float screen_h) {
+  /* (Android's MotionEvent.AXIS_* a pad can report) */
+  static const char *const AXIS[48] = { [0] = "X", [1] = "Y", [11] = "Z", [12] = "RX", [13] = "RY", [14] = "RZ", [15] = "HAT X", [16] = "HAT Y",
+                                        [17] = "LTRIGGER", [18] = "RTRIGGER", [19] = "THROTTLE", [20] = "RUDDER", [21] = "WHEEL", [22] = "GAS",
+                                        [23] = "BRAKE" };
+  /* (in app.h's PAD_* order, without PAD_LT and PAD_RT: the triggers have their bars) */
+  static const char *const KEY[10] = { "A", "B", "X", "Y", "LB", "RB", "START", "SELECT", "LEFT", "RIGHT" };
+  draw_back(ID.bg, clock % 600, 1);
+  anm_fill(0, 0, 0, 0.6f);
+  hud_ui_begin(screen_w, screen_h);
+  const float p[4] = { 80, 40, 864, 640 };
+  hud_ui_rect(p[0], p[1], p[2], p[3], 0.03f, 0.04f, 0.06f, 0.88f);
+  hud_ui_rect(p[0], p[1], p[2], 3, 1.0f, 0.42f, 0.05f, 0.95f);
+  layout_text_mid("CONTROLLER TEST", p[1] + 12, 4, 1, 1, 1);
+  const float *rd = m->pad_view_read, *out = m->pad_view_out;
+  int td = m->pad_trigger_dead, te = m->pad_trigger_end, sd = m->pad_stick_dead, se = m->pad_stick_end;
+  pad_test_bar("RT RAW", rd[5], 0, 88, m->pad_digital[MENU_PAD_THROTTLE] ? -2 : td, te);
+  pad_test_bar("THROTTLE", out[1], 0, 108, -1, 0);
+  pad_test_bar("LT RAW", rd[4], 0, 128, m->pad_digital[MENU_PAD_BRAKE] ? -2 : td, te);
+  pad_test_bar("BRAKE", out[2], 0, 148, -1, 0);
+  pad_test_bar("LX RAW", rd[0], 1, 168, m->pad_digital[MENU_PAD_STEER] ? -2 : sd, se);
+  pad_test_bar("STEERING", out[0], 1, 188, -1, 0);
+  pad_test_bar("LY RAW", rd[1], 1, 208, sd, se);
+  pad_test_bar("LY OUT", out[3], 1, 228, -1, 0);
+  pad_test_bar("RX RAW", rd[2], 1, 248, sd, se);
+  pad_test_bar("RX OUT", out[4], 1, 268, -1, 0);
+  pad_test_bar("RY RAW", rd[3], 1, 288, sd, se);
+  pad_test_bar("RY OUT", out[5], 1, 308, -1, 0);
+  for (int i = 0; i < 10; ++i) {
+    int held = m->pad_view_buttons >> (i < 6 ? i : i + 2) & 1;
+    float x = 104.0f + 134.0f * (float)(i % 6), y = 334.0f + 42.0f * (float)(i / 6), on = held ? 1.0f : 0.45f;
+    hud_ui_button(x, y, 128, 36, held);
+    hud_ui_text(KEY[i], x + 0.5f * (128.0f - hud_ui_text_width(KEY[i], 2)), y + 11.0f, 2, on, on, on, 1);
+  }
+  hud_ui_text("EVERY AXIS THE DEVICE REPORTS: NAME MIN / MAX VALUE", 104, 428, 2, 1.0f, 0.55f, 0.15f, 1);
+  if (!m->pad_axes) hud_ui_text("MOVE A STICK OR TRIGGER", 104, 452, 2, 1, 1, 1, 1);
+  for (int i = 0; i < m->pad_axes; ++i) {
+    int id = m->pad_axis_id[i];
+    char s[48], name[12];
+    if (id >= 0 && id < 48 && AXIS[id]) snprintf(name, sizeof name, "%s", AXIS[id]);
+    else snprintf(name, sizeof name, "AXIS %d", id);
+    snprintf(s, sizeof s, "%-8s %+.2f / %+.2f %+.2f", name, (double)m->pad_axis_v[i][1], (double)m->pad_axis_v[i][2], (double)m->pad_axis_v[i][0]);
+    hud_ui_text(s, 104.0f + 416.0f * (float)(i % 2), 452.0f + 22.0f * (float)(i / 2), 2, 1, 1, 1, 1);
+  }
+  layout_text_mid("HOLD START + SELECT TO LEAVE", p[1] + p[3] - 26, 2, 1.0f, 0.55f, 0.15f);
   hud_ui_end();
 }
 
@@ -5387,6 +5491,7 @@ void menu_init(menu_state *m) {
   for (int g = 0; g < 3; ++g) m->key_k[g] = 100, m->key_dx[g] = m->key_dy[g] = 0;
   /* (a pad's sticks rest a little off centre) */
   m->pad_stick_dead = 12, m->pad_trigger_dead = 4, m->pad_rumble = 2;
+  m->pad_stick_end = 100, m->pad_trigger_end = 80;
   m->pad_shift_dead = 50;
   m->fps = 120;
   m->poem = -1;
@@ -6015,7 +6120,7 @@ static void tg_part_done(menu_state *m) {
  * bar's message 0x1f0a (else 0x1f6e); the panel (col_waku_2, frame 6 - colours) shows the
  * colour's big picture (+ 0x24; No change's: the worn one's first colour; stock none),
  * col_logo the name logo (+ 0x1c). The cabinet's colour button turns the colour: here a tap
- * on a swatch or the panel. A tap on a place steps towards it, off the bar it decides (SE
+ * on a swatch or the panel, or a controller's Y (tg_colour_next). A tap on a place steps towards it, off the bar it decides (SE
  * 0x1a), then the fade out; the arcade's limit (5 s a place and 5): none here. ---- */
 #define TG_WHEEL_SLIDE 5
 enum { T_WHEEL_STOCK = 0x16ff, T_WHEEL_KEEP = 0x18b4, T_WHEEL_FIRST = 0xbb3, T_WHEEL_SWATCH = 0x1e60, T_WHEEL_DOT = 0x6b4,
@@ -6342,6 +6447,14 @@ static int tg_vinyl_colour_hit(const menu_state *m) {
   if (anm_sprite_rect(ID.tg_vinyl_col, tg_vinyl_col_frame(m), anm_sprite(0x1e54), r) && near_rect(m, r, 0, 4.0f))
     return (m->tg.col + 1) % n;
   return -1;
+}
+
+/* the cabinet's colour button: a part's next of n colours, back to the first after the last */
+static void tg_colour_next(menu_state *m, int n) {
+  if (n < 2 || m->tg.move || m->deciding || m->card_t < TG_FADE) return;
+  snd_menu(SND_CURSOR);
+  m->tg.col = (m->tg.col + 1) % n;
+  m->tg.reset_t = m->card_t;
 }
 
 static void tg_vinyl_step(menu_state *m, int tap, int key) {
@@ -8751,6 +8864,10 @@ static void step(menu_state *m) {
     pad_step(m, tap, back);
     return;
   }
+  if (m->screen == MENU_PAD_TEST) {
+    pad_test_step(m);
+    return;
+  }
   if (m->screen == MENU_OPTION) {
     if (back) {
       snd_menu(SND_CANCEL);
@@ -8942,10 +9059,12 @@ static void step(menu_state *m) {
   }
   if (m->screen == MENU_TG_WHEEL) {
     tg_wheel_step(m, tap, key);
+    if (option && tg_wheel_column(m)) tg_colour_next(m, tg_wheel_colours(m, m->sel));
     return;
   }
   if (m->screen == MENU_TG_VINYL) {
     tg_vinyl_step(m, tap, key);
+    if (option) tg_colour_next(m, vinyl_colours(m->tg.gem, m->tg.wl[m->sel]));
     return;
   }
   if (m->screen == MENU_TG_WEAR) {
@@ -9041,6 +9160,8 @@ void menu_pad_key(menu_state *m, int key) {
   if (bar_key(m, key)) return;
   /* the BGM select's "Use the view button to change music": a tap on its line (day_select_step) */
   if (key == HUD_MENU_OPTION && m->screen == MENU_BGM) m->tap_x = 320.0f, m->tap_y = 360.0f, m->tap = 1;
+  /* the wheels' and stickers' "Use the view button to change colour" (tg_colour_next) */
+  if (key == HUD_MENU_OPTION && (m->screen == MENU_TG_WHEEL || m->screen == MENU_TG_VINYL)) m->option = 1;
 }
 
 void menu_pad_back(menu_state *m) {
@@ -9409,6 +9530,12 @@ void menu_draw(const menu_state *m, float screen_w, float screen_h, void (*draw3
     if (m->t < FADE) fade = (float)(m->t + 1) / FADE;
     draw_pad(m, clock, screen_w, screen_h);
     hud_draw_menu_keys(screen_w, screen_h, m->key_held, 0, 1);
+    anm_fill(0, 0, 0, 1.0f - fade);
+    return;
+  }
+  if (m->screen == MENU_PAD_TEST) {
+    if (m->t < FADE) fade = (float)(m->t + 1) / FADE;
+    draw_pad_test(m, clock, screen_w, screen_h);
     anm_fill(0, 0, 0, 1.0f - fade);
     return;
   }

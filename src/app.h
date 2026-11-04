@@ -21,6 +21,9 @@ void app_touch(void *id, int phase, float x, float y);
 enum { PAD_A = 1, PAD_B = 2, PAD_X = 4, PAD_Y = 8, PAD_LB = 16, PAD_RB = 32, PAD_LT = 64, PAD_RT = 128,
        PAD_START = 256, PAD_SELECT = 512, PAD_LEFT = 1024, PAD_RIGHT = 2048 };
 void app_pad(float dt, int on, int buttons, float lx, float ly, float rx, float ry, float lt, float rt);
+/* for the controller test: n (to MENU_PAD_AXES) axes as the device reports them, each its Android
+ * AXIS_* number and three floats: value, min, max */
+void app_pad_axes(int n, const int *id, const float *v);
 /* After app_frame: a pulse of the controller's motors due now, its ms (0 none) and strength 0..1
  * (the race's hits, as loud as their sounds; the CONTROLLER screen's test). */
 int app_rumble(float *strength);

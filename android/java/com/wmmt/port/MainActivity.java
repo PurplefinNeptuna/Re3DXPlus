@@ -34,6 +34,7 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback, Se
   static native void nativeSurface(Surface s, int w, int h);
   static native void nativeTouch(int id, int phase, float x, float y);
   static native void nativePad(int on, int buttons, float lx, float ly, float rx, float ry, float lt, float rt);
+  static native void nativePadAxes(int n, int[] id, float[] v);
   static native void nativePause(boolean p);
   static native void nativeTilt(float radians);
   static native boolean nativeWantsTilt();
@@ -56,6 +57,9 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback, Se
   private android.os.Vibrator padMotors; /* the connected pad's motors, null none */
   private int padKeys, padHat;
   private float padLx, padLy, padRx, padRy, padLt, padRt;
+  /* the controller test's: menu.h's MENU_PAD_AXES axes, each its number and value, min, max */
+  private final int[] padAxisId = new int[16];
+  private final float[] padAxisV = new float[3 * 16];
 
   @Override protected void onCreate(Bundle b) {
     super.onCreate(b);
@@ -143,6 +147,7 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback, Se
     padKeys = padHat = 0;
     padLx = padLy = padRx = padRy = padLt = padRt = 0;
     padSend();
+    nativePadAxes(0, padAxisId, padAxisV);
   }
 
   private void padScan() {
@@ -183,6 +188,8 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback, Se
   @Override public boolean dispatchKeyEvent(KeyEvent e) {
     int bit = padBit(e.getKeyCode());
     if (bit == 0 || !isPad(e.getDevice())) return super.dispatchKeyEvent(e);
+    /* Generic.kcm turns keys nothing took into others: the stick buttons (THUMBL, THUMBR) into DPAD_CENTER, our A */
+    if ((e.getFlags() & KeyEvent.FLAG_FALLBACK) != 0) return true;
     if (e.getAction() == KeyEvent.ACTION_DOWN) padKeys |= bit;
     else if (e.getAction() == KeyEvent.ACTION_UP) padKeys &= ~bit;
     padSend();
@@ -202,6 +209,16 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback, Se
     float hat = e.getAxisValue(MotionEvent.AXIS_HAT_X);
     padHat = hat < -0.5f ? 1024 : hat > 0.5f ? 2048 : 0;
     padSend();
+    int n = 0;
+    for (InputDevice.MotionRange r : e.getDevice().getMotionRanges()) {
+      if (n == padAxisId.length || !r.isFromSource(InputDevice.SOURCE_JOYSTICK)) continue;
+      padAxisId[n] = r.getAxis();
+      padAxisV[3 * n] = e.getAxisValue(r.getAxis());
+      padAxisV[3 * n + 1] = r.getMin();
+      padAxisV[3 * n + 2] = r.getMax();
+      n++;
+    }
+    nativePadAxes(n, padAxisId, padAxisV);
     return true;
   }
 
