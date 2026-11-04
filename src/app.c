@@ -970,10 +970,11 @@ static void garage_load(void) {
   snprintf(path, sizeof path, "%s/garage%d", G.save_dir, G.menu.save_slot);
   FILE *f = G.menu.save_slot ? fopen(path, "r") : NULL;
   if (!f) return;
-  int a, b, legacy = 0;
+  int a, b, legacy = 0, named = 0;
   while (fgets(line, sizeof line, f)) {
     if (sscanf(line, "gearbox %d", &a) == 1) G.menu.manual = a != 0;
     name_read(line, G.menu.name);
+    named |= strncmp(line, "name ", 5) == 0;
     int c2, d2 = 1;
     if (!G.options_global && sscanf(line, "option %d %d %d %d", &a, &b, &c2, &d2) >= 3) {
       G.menu.gyro = a >= 0 && a < HUD_STEER_MODES ? a : 0;
@@ -1103,7 +1104,13 @@ static void garage_load(void) {
         }
   }
   fclose(f);
-  if (!G.menu.n_own) garage_adopt_cars(legacy);
+  /* (garage_save always writes a name and no legacy line: no cars there is every car deleted) */
+  if (!G.menu.n_own && (legacy || !named)) garage_adopt_cars(legacy);
+  /* (an older build leaked these between saves, as menu_garage_reset kept them: a car not
+   * in this save wears nothing) */
+  for (int mk = 0; mk < CARDB_ALL; ++mk)
+    for (int c = 0; c < CARDB_NCARS[mk]; ++c)
+      if (menu_own_find(&G.menu, mk, c) < 0) G.menu.neon[mk][c] = 0, G.menu.vinyl[mk][c] = 0;
   /* (a garage from before the classes: each car's from its results) */
   menu_class_update(&G.menu);
 }

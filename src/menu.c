@@ -5248,6 +5248,8 @@ void menu_garage_reset(menu_state *m) {
   memset(m->wing, 0, sizeof m->wing);
   memset(m->bonnet, 0, sizeof m->bonnet);
   memset(m->wheel, 0, sizeof m->wheel);
+  memset(m->neon, 0, sizeof m->neon);
+  memset(m->vinyl, 0, sizeof m->vinyl);
   m->st_tune_due = m->n_dress_due = 0;
   m->st_lost = 0;
   m->n_own = 0;
