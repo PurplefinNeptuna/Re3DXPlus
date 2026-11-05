@@ -609,6 +609,7 @@ CUTIN_TEXT_BASE, CUTIN_FACE_BASE = 103000, 103200
 CUTIN_CHAR_NAMES, CUTIN_CHAR_SWITCH, CUTIN_CHARS = 0x9768FA0, 0x93CFFB8, 0x42
 CUTIN_SWITCH_DEFAULT, CUTIN_DEFAULT_IMAGE = 0x85D4703, 0xD71
 CUTIN_FONT, CUTIN_FACE = 3, 128
+CUTIN_WIDEST = 448  # cons_g_cutin_serifu: a line centred on x 257 reaches the face at x 481
 
 
 def cutin_lines(root):
@@ -939,6 +940,22 @@ def render_text(elf, names, root, font, text):
     return out
 
 
+def wrap_lines(elf, font, lines, widest):
+    """lines too wide broken at the space nearest their middle: the English script's longer lines
+    ran into the speaker's face. A line with no space (Japanese) stays as it is."""
+    _, half, full, _ = struct.unpack_from("<4I", elf.d, elf.off(FONT_TABLE + 36 * font))
+    adv = lambda t: sum(half if ord(c) <= 0x7F else full for c in t)
+    out = []
+    for t in lines:
+        spaces = [i for i, c in enumerate(t) if c == " " and t[:i].strip() and t[i:].strip()]
+        if adv(t) <= widest or not spaces:
+            out.append(t)
+            continue
+        i = min(spaces, key=lambda i: abs(adv(t[:i]) - adv(t[i + 1:])))
+        out += wrap_lines(elf, font, [t[:i].rstrip(), t[i + 1:].lstrip()], widest)
+    return out
+
+
 def render_lines(elf, names, root, font, lines):
     """clSpriteFont::draw of a string with new lines: each line from the same left, one full
     width further down. The sprite is the widest line's advances (updateSize's width) plus a
@@ -1122,7 +1139,7 @@ def main():
 
     images = cutin_images(elf)
     for k, (char, face, text) in enumerate(cutin_lines(root)):
-        sprites.append(render_lines(elf, names, root, CUTIN_FONT, text))
+        sprites.append(render_lines(elf, names, root, CUTIN_FONT, wrap_lines(elf, CUTIN_FONT, text, CUTIN_WIDEST)))
         ids.append(CUTIN_TEXT_BASE + k)
         sheet = Image.open(f"{root}/{names[images[char]]}").convert("RGBA")
         c = face - 1
@@ -1133,7 +1150,7 @@ def main():
 
     by_char = cutin_image_ids(elf)
     for k, (char, expr, text) in enumerate(DEMO_TEXTS):
-        sprites.append(render_lines(elf, names, root, CUTIN_FONT, text.replace("#", " ").split("\\n")))
+        sprites.append(render_lines(elf, names, root, CUTIN_FONT, wrap_lines(elf, CUTIN_FONT, text.replace("#", " ").split("\\n"), CUTIN_WIDEST)))
         ids.append(DEMO_TEXT_BASE + k)
         sid, c = by_char[int(char)], int(expr)
         if sid is not None and names.get(sid):
@@ -1150,7 +1167,7 @@ def main():
     # each text in font 3, each face as the 10-in-a-row's (cell expression - 1 of the sheet)
     for kind, k, *rest in STORYCUT:
         if kind == "T":
-            sprites.append(render_lines(elf, names, root, CUTIN_FONT, rest[0].split("\\n")))
+            sprites.append(render_lines(elf, names, root, CUTIN_FONT, wrap_lines(elf, CUTIN_FONT, rest[0].split("\\n"), CUTIN_WIDEST)))
             ids.append(STORYCUT_TEXT_BASE + k)
             ZIPPED.add(STORYCUT_TEXT_BASE + k)
             continue

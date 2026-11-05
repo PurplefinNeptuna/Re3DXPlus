@@ -3171,8 +3171,8 @@ void menu_vs_closed(menu_state *m, const char *note) {
 }
 
 /* The race left with the screen white (the pause menu's NO) or black (its end): back on the
- * time zone and BGM select (a story race: the game mode select), out of the white like the car select from the title, or out of
- * the black as from the course select */
+ * course select (a story race: the game mode select), out of the white like the car select from the title, or out of
+ * the black as from the mode select */
 static void back_from_race(menu_state *m, int white) {
   /* a story race goes back to the game mode select; one whose select runs a second race on
    * (menu_finish_story's next) to that race's title */
@@ -3239,9 +3239,9 @@ static void back_from_race(menu_state *m, int white) {
   if (!white && tg_due(m)) return;
   /* the 10-in-a-row back to the game mode select too */
   int game = m->game != MENU_GAME_TA;
-  go(m, game ? MENU_GAME : MENU_BGM);
+  go(m, game ? MENU_GAME : MENU_COURSE); /* (go puts the course select on the course just raced) */
   m->t = white ? FADE : 0; /* white: no fade in from black */
-  m->sel = game ? game_slot(m->game) : m->bgm;
+  if (game) m->sel = game_slot(m->game);
   m->slide = m->card_t = 0;
   m->bars = 1;
   m->music = 1;
@@ -7452,12 +7452,16 @@ static void draw_vs_star(const menu_state *m, void (*draw3d)(void *), void *ctx)
     int title = m->title_car[mk][cr] > 0 ? m->title_car[mk][cr] : TITLE_FIRST;
     const unsigned short *g;
     int n = title_glyphs(title, &g);
-    float x = r[0];
+    float x = r[0], w = 0.0f, power[4], room = 9999.0f;
+    if (anm_sprite_rect(ID.star_title, 0, anm_sprite(T_STAR_POWER), power)) room = power[0] - r[0] - 8.0f;
+    for (int i = 0; i < n; ++i) w += title_glyph_half(g[i]) ? 8.0f : 16.0f;
+    /* (a long English title narrowed up to the horsepower) */
+    float z = w > room ? room / w : 1.0f, y = r[1] + 10.0f * (1.0f - z);
     for (int i = 0; i < n; ++i) {
       int s = anm_sprite(TITLE_GLYPH1 + g[i]);
-      float src[4] = { 0, 0, 20, 20 }, dst[4] = { x, r[1], x + 20, r[1] + 20 };
+      float src[4] = { 0, 0, 20, 20 }, dst[4] = { x, y, x + 20 * z, y + 20 * z };
       if (s >= 0) anm_draw_part(s, src, dst, 1);
-      x += title_glyph_half(g[i]) ? 8.0f : 16.0f;
+      x += (title_glyph_half(g[i]) ? 8.0f : 16.0f) * z;
     }
   }
   if (anm_sprite_rect(ID.star_title, 0, anm_sprite(T_STAR_POWER), r)) {
@@ -7668,12 +7672,16 @@ static void shogo_step(menu_state *m, int tap, int key) {
 /* the GET and REWRITE screens' big titles: font 7, or font 5, the size the English build's layouts leave
  * room for, lower to sit in the plate's middle and narrowed to its width when long; then those */
 #if STORYSEL_ENGLISH
-#define SHOGO_BIG TITLE_GLYPH5, 16, 28, 32, 12.0f, 360.0f
+#define SHOGO_BIG TITLE_GLYPH5, 16, 28, 32, 12.0f, 360.0f, 0.0f
+/* the spin box's discs: a long English title in two lines, the first above the template (the
+ * disc's words are right under it), as wide as the disc is there */
+#define SHOGO_DISC TITLE_GLYPH1, 8, 16, 20, 0.0f, 170.0f, 16.0f
 #else
-#define SHOGO_BIG TITLE_GLYPH7, 18, 36, 40, 0.0f, 9999.0f
+#define SHOGO_BIG TITLE_GLYPH7, 18, 36, 40, 0.0f, 9999.0f, 0.0f
+#define SHOGO_DISC TITLE_GLYPH1, 8, 16, 20, 0.0f, 9999.0f, 0.0f
 #endif
-static void shogo_text(int anim, int frame, int tmpl, int base, int half, int full, int cell, float dy, float widest, int id,
-                       float alpha) {
+static void shogo_text(int anim, int frame, int tmpl, int base, int half, int full, int cell, float dy, float widest, float up,
+                       int id, float alpha) {
   float r[4], a;
   int t = anm_sprite(tmpl);
   float tw = anm_sprite_width(t), th = anm_sprite_height(t);
@@ -7682,17 +7690,24 @@ static void shogo_text(int anim, int frame, int tmpl, int base, int half, int fu
   int n = title_glyphs(id, &g);
   float w = 0.0f;
   for (int i = 0; i < n; ++i) w += (float)(title_glyph_half(g[i]) ? half : full);
+  int cut = up > 0.0f && w > widest ? title_break(g, n) : 0; /* (given a line's height to break with) */
   /* each of the frame's records of the template (a decided card has a hidden one too) */
   for (int k = 0; anm_sprite_rect_at(anim, frame, t, k, r, &a); ++k) {
     if ((a *= alpha) <= 0.0f) continue;
-    float sx = (r[2] - r[0]) / tw, sy = (r[3] - r[1]) / th, z = w > widest ? widest / w : 1.0f;
-    float x = ((float)full - w * z) / 2.0f, top = r[1] + sy * (dy + (float)cell * (1.0f - z) / 2.0f);
-    for (int i = 0; i < n; ++i) {
-      int s = anm_sprite(base + g[i]);
-      float src[4] = { 0, 0, (float)cell, (float)cell };
-      float dst[4] = { r[0] + sx * x, top, r[0] + sx * (x + (float)cell * z), top + sy * (float)cell * z };
-      if (s >= 0) anm_draw_part(s, src, dst, a);
-      x += (float)(title_glyph_half(g[i]) ? half : full) * z;
+    float sx = (r[2] - r[0]) / tw, sy = (r[3] - r[1]) / th;
+    for (int line = cut ? 0 : 1; line < 2; ++line) {
+      int from = line && cut ? cut + 1 : 0, to = line ? n : cut;
+      float lw = 0.0f;
+      for (int i = from; i < to; ++i) lw += (float)(title_glyph_half(g[i]) ? half : full);
+      float z = lw > widest ? widest / lw : 1.0f, ly = dy - (line ? 0.0f : up);
+      float x = ((float)full - lw * z) / 2.0f, top = r[1] + sy * (ly + (float)cell * (1.0f - z) / 2.0f);
+      for (int i = from; i < to; ++i) {
+        int s = anm_sprite(base + g[i]);
+        float src[4] = { 0, 0, (float)cell, (float)cell };
+        float dst[4] = { r[0] + sx * x, top, r[0] + sx * (x + (float)cell * z), top + sy * (float)cell * z };
+        if (s >= 0) anm_draw_part(s, src, dst, a);
+        x += (float)(title_glyph_half(g[i]) ? half : full) * z;
+      }
     }
   }
 }
@@ -7732,8 +7747,8 @@ static void draw_shogo(const menu_state *m, int clock) {
                        { anm_sprite(T_YN_FONT + 1), -1 }, { anm_sprite(T_YN_FONT + 2), -1 },
                        { anm_sprite(T_YN_FONT + 3), -1 } };
     anm_draw_ex(ID.yn_rank, sf, 1, 0, 0, sw, 7);
-    shogo_text(ID.yn_rank, sf, T_YN_FONT + 1, TITLE_GLYPH1, 8, 16, 20, 0.0f, 9999.0f, m->title_new[m->title_k], 1);
-    shogo_text(ID.yn_rank, sf, T_YN_FONT + 3, TITLE_GLYPH1, 8, 16, 20, 0.0f, 9999.0f, menu_title(m), 1);
+    shogo_text(ID.yn_rank, sf, T_YN_FONT + 1, SHOGO_DISC, m->title_new[m->title_k], 1);
+    shogo_text(ID.yn_rank, sf, T_YN_FONT + 3, SHOGO_DISC, menu_title(m), 1);
     if (!m->slide && !m->title_dec) anm_draw(ID.day_ring, z + (m->card_t < 59 ? m->card_t : 59), 1);
     /* the bars: in as the spin box opens, out as it fades */
     int bars = m->title_out ? 160 + (m->title_out < 10 ? m->title_out : 10) : m->bars ? 188 + m->bars : clock % 160;

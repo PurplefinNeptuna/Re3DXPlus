@@ -516,6 +516,9 @@ void hud_set_card(int title, const short *name) {
 
 /* glyphs of base (cells of `cell` px, drawn `out` px) from x, y (the HUD's points): their
  * advances half or full (in out's px), each glyph half if its character is ASCII */
+#define PLATE_TITLE_MAX 40 /* the longest English title is 37 */
+#define PLATE_TWO_Z 0.73f  /* 15 down to 11 pixels, what fits twice at a 9 pixel pitch */
+#define VS_TITLE_ROOM 120.0f /* cons_g_rival: the name and title plate 0x1118 is 128 wide */
 static void plate_glyphs(int base, const unsigned short *g, const unsigned char *half, int n, float x, float y,
                          float cell, float out, float adv_half, float adv_full) {
   const float k = HUD_K / 1.6f; /* the HUD's points over the menus' 640x480 */
@@ -537,12 +540,30 @@ static void draw_plate_text(void) {
   if (!SPR[SPR_PLATE].tex || !plate_text_ok()) return;
   float k = HUD_K, x0 = 1024 + EDGE - SPR[SPR_PLATE].w * k, y0 = INFO_Y;
   const unsigned short *tg;
-  unsigned short g[32];
-  unsigned char half[32];
+  unsigned short g[PLATE_TITLE_MAX];
+  unsigned char half[PLATE_TITLE_MAX];
   int n = title_glyphs(plate_title, &tg);
-  if (n > 32) n = 32;
-  for (int i = 0; i < n; ++i) g[i] = tg[i], half[i] = (unsigned char)title_glyph_half(tg[i]);
-  plate_glyphs(PLATE_TITLE_GLYPH, g, half, n, x0 + 71 * k, y0 + 3.5f * k, 20, 15, 7, 11);
+  if (n > PLATE_TITLE_MAX) n = PLATE_TITLE_MAX;
+  float tw = 0;
+  for (int i = 0; i < n; ++i) {
+    g[i] = tg[i], half[i] = (unsigned char)title_glyph_half(tg[i]);
+    tw += half[i] ? 7 : 11;
+  }
+  /* a long English title: narrowed to the plate's right edge, or, too small that way, two tight
+   * lines in the 20 pixels over the plate's divider (y 21) */
+  float room = SPR[SPR_PLATE].w - 71 - 6, z = tw > room ? room / tw : 1;
+  int cut = z < PLATE_TWO_Z ? title_break(g, n) : 0;
+  if (cut) {
+    float w0 = 0, w1 = 0;
+    for (int i = 0; i < cut; ++i) w0 += half[i] ? 7 : 11;
+    for (int i = cut + 1; i < n; ++i) w1 += half[i] ? 7 : 11;
+    z = room / (w0 > w1 ? w0 : w1);
+    if (z > PLATE_TWO_Z) z = PLATE_TWO_Z;
+    plate_glyphs(PLATE_TITLE_GLYPH, g, half, cut, x0 + 71 * k, y0 + 1 * k, 20, 15 * z, 7 * z, 11 * z);
+    plate_glyphs(PLATE_TITLE_GLYPH, g + cut + 1, half + cut + 1, n - cut - 1, x0 + 71 * k, y0 + 10 * k, 20, 15 * z, 7 * z, 11 * z);
+  } else {
+    plate_glyphs(PLATE_TITLE_GLYPH, g, half, n, x0 + 71 * k, y0 + (3.5f + 7.5f * (1 - z)) * k, 20, 15 * z, 7 * z, 11 * z);
+  }
   if (plate_name_n) {
     float w = 0;
     for (int i = 0; i < plate_name_n; ++i) {
@@ -1302,8 +1323,8 @@ static void draw_vs_box(int i, float gap) {
   anm_draw_xf(a, frame, 1, dx, dy, zoom, sw, n);
   /* the name (font 1: the menus' font 5 glyphs down to its 20-pixel cells, advances 8 and 16)
    * and the title (font 0: font 1's down to 15, advances 7 and 11), as the plate has them */
-  unsigned short g[32];
-  unsigned char half[32];
+  unsigned short g[PLATE_TITLE_MAX];
+  unsigned char half[PLATE_TITLE_MAX];
   int len = 0;
   for (int k = 0; k < 5 && b->name[k] >= 0 && b->name[k] < NAMEDB_N; ++k) {
     g[len] = (unsigned short)b->name[k];
@@ -1312,9 +1333,14 @@ static void draw_vs_box(int i, float gap) {
   vs_text(a, frame, T_VS_NAME, PLATE_NAME_GLYPH, g, half, len, 32, 20, 8, 16, dx, dy, zoom);
   const unsigned short *tg;
   len = title_glyphs(b->title > 0 ? b->title : TITLE_FIRST, &tg);
-  if (len > 32) len = 32;
-  for (int k = 0; k < len; ++k) g[k] = tg[k], half[k] = (unsigned char)title_glyph_half(tg[k]);
-  vs_text(a, frame, T_VS_TITLE, PLATE_TITLE_GLYPH, g, half, len, 20, 15, 7, 11, dx, dy, zoom);
+  if (len > PLATE_TITLE_MAX) len = PLATE_TITLE_MAX;
+  float tw = 0;
+  for (int k = 0; k < len; ++k) {
+    g[k] = tg[k], half[k] = (unsigned char)title_glyph_half(tg[k]);
+    tw += half[k] ? 7 : 11;
+  }
+  float tz = tw > VS_TITLE_ROOM ? VS_TITLE_ROOM / tw : 1; /* (a long English title narrowed to the box) */
+  vs_text(a, frame, T_VS_TITLE, PLATE_TITLE_GLYPH, g, half, len, 20, 15 * tz, 7 * tz, 11 * tz, dx, dy, zoom);
 }
 
 static void draw_vs(const car_state *car) {

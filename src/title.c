@@ -137,6 +137,19 @@ int title_glyphs(int id, const unsigned short **glyphs) {
 
 int title_glyph_half(int g) { return g >= 0 && g < TITLEDB_CHARS && TITLEDB_CHAR[g] <= 0x7f; }
 
+/* where a long title breaks in two: the glyph of the space nearest its middle, 0 with none */
+int title_break(const unsigned short *g, int n) {
+  int w = 0, at = 0, cut = 0, best = 0;
+  for (int i = 0; i < n; ++i) w += title_glyph_half(g[i]) ? 1 : 2;
+  best = w + 1;
+  for (int i = 0; i < n; ++i) {
+    int off = at * 2 > w ? at * 2 - w : w - at * 2;
+    if (i > 0 && g[i] >= 0 && g[i] < TITLEDB_CHARS && TITLEDB_CHAR[g[i]] == 0x20 && off < best) best = off, cut = i;
+    at += title_glyph_half(g[i]) ? 1 : 2;
+  }
+  return cut;
+}
+
 int title_model(int maker, int car, int color) {
   if (maker < 0 || maker >= (int)(sizeof TITLEDB_MODEL / sizeof TITLEDB_MODEL[0]) || car < 0 || car >= 12 || color < 0 || color >= 8)
     return -1;

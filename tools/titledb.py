@@ -132,7 +132,7 @@ def main():
     for _, t in titles:
         at.append(len(text))
         text += [index[c] for c in t]
-    w("static const unsigned short TITLEDB_AT[TITLEDB_N] = {\n")
+    w("static const unsigned int TITLEDB_AT[TITLEDB_N] = {\n")
     for k in range(0, N, 16):
         w("  " + ", ".join(str(a) for a in at[k:k + 16]) + ",\n")
     w("};\n")
