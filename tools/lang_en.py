@@ -50,7 +50,8 @@ CAR_FIXES = [("black Z33", "black Gemballa"), ("the 700 hp FR", "the 700 hp RR")
 TEXT_FIXES = CAR_FIXES + [("^", ",")]
 
 # the port's literals (from, to), in this order, applied by menupack.py to whatever text it renders
-LITERALS = [("人目", " racer"), ("級　/", " /"), ("湾岸の新人", "Wangan Beginner"), ("馬力", "HP"), ("スタートランプ", "Start Ramp"),
+LITERALS = [("ノーマル", "Normal"), ("戦 ", " races "), ("勝 ", " wins"), ("枚 ", " coin(s)"), ("戦　", " Races"), ("撃墜", " Outruns"),
+            ("人目", " racer"), ("級　/", " /"), ("湾岸の新人", "Wangan Beginner"), ("馬力", "HP"), ("スタートランプ", "Start Ramp"),
             ("装着完了！", "Installed!"), ("純正ホイールに交換完了！", "Stock wheels installed!"),
             ("個人タクシー", "Private taxi"), ("教習車", "Driving school"),
             ("箱根往路", "Hakone outbound"), ("箱根復路", "Hakone inbound"), ("御殿場", "Gotemba"),

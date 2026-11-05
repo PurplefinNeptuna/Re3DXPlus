@@ -183,7 +183,7 @@ On Android a connected controller hides the race's touch keys and the menus' arr
 | Start | Pause | Same as A |
 | Select | Reset the car | |
 
-The save, name, OPTION, CONTROLLER, Key Layout, card setting and versus screens have no single selected item, so the cursor is always shown there. While a controller is connected, the OPTION screen has a CONTROLLER key. It sets steering, throttle and brake to analog (follows how far you press) or digital (1 or 0, on past half way), the stick and trigger dead zones and end positions, and rumble (off, low, medium or high). Rumble pulses on crashes and wall scrapes, on controllers that have motors. The stick's dead zone also applies to the cursor.
+The save, name, OPTION, CONTROLLER, Key Layout, the card's two settings pages and versus screens have no single selected item, so the cursor is always shown there. While a controller is connected, the OPTION screen has a CONTROLLER key. It sets steering, throttle and brake to analog (follows how far you press) or digital (1 or 0, on past half way), the stick and trigger dead zones and end positions, and rumble (off, low, medium or high). Rumble pulses on crashes and wall scrapes, on controllers that have motors. The stick's dead zone also applies to the cursor.
 
 An end position is how far a stick or trigger must go to count as all the way: Trigger End defaults to 80 because many triggers stop short of their full value, Stick End to 100. In analog, the throttle starts at 0.20, the first value the arcade's physics responds to just above, so the first part of a press is not wasted.
 

@@ -19,6 +19,7 @@ menu.bin ("WMN3"):
 """
 import json
 import os
+import re
 import struct
 import sys
 import zlib
@@ -256,6 +257,28 @@ ANIMS = [
     # the card's first page (clSeqCardDisp1): its frame and its fields' fonts
     ("menu_g_cardcheck_1_waku", None),
     ("menu_layout_cardcheck_1", None),
+    # the card's other pages (clSeqCardDisp2..9, menu.c): story, ghost battle, its last matches,
+    # 10-in-a-row, versus, time attack, then the two settings pages' frames
+    ("menu_g_cardcheck_2_waku", None),
+    ("menu_layout_cardcheck_2", None),
+    ("menu_g_cardcheck_2_chara", None),
+    ("menu_g_cardcheck_2_count", None),
+    ("menu_g_cardcheck_3_waku", None),
+    ("menu_layout_cardcheck_3", None),
+    ("menu_layout_cardcheck_3_crown", None),
+    ("menu_layout_cardcheck_14_2_waku", None),
+    ("menu_g_cardcheck_14_data", None),
+    ("menu_g_cardcheck_4_image", None),
+    ("menu_g_cardcheck_4_lv", None),
+    ("menu_g_cardcheck_5_waku", None),
+    ("menu_layout_cardcheck_5", None),
+    ("menu_g_cardcheck_5_point", None),
+    ("menu_g_cardcheck_6_waku", None),
+    ("menu_g_cardcheck_6_mask", None),
+    ("menu_g_cardcheck_6_scrollstop", None),
+    ("menu_g_cardcheck_6_time", None),
+    ("menu_g_cardcheck_7_waku", None),
+    ("menu_g_cardcheck_8_waku", None),
     # the class-up screen (clSeqLvUpThread): its backgrounds and layout
     ("menu_g_shogo_bg_1", None),
     ("menu_g_shogo_bg_2", None),
@@ -279,11 +302,27 @@ DEMO_ANIMS = sorted({l.split('"')[1] for l in open(os.path.join(os.path.dirname(
                      and l.count(",") == 4})
 ANIMS += [(n, None) for n in DEMO_ANIMS if (n, None) not in ANIMS]
 
+def _story_faces():
+    """the card's story page's pictures (src/storyinfo.h STORYINFO_FACE, get_story_data)"""
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "src", "storyinfo.h")
+    text = open(path, encoding="utf-8").read()
+    body = text[text.index("STORYINFO_FACE"):]
+    return sorted({int(v) for v in re.findall(r"\b\d+\b", body[body.index("{"):body.index("};")])})
+
+
 # Sprites the game swaps into the animations at run time (clSpriteAnime::setImageReplace),
 # so they are packed even though no animation names them. Ids index the table in main.
 EXTRA = [
     # the card's first page: the top bar's "Card data confirmed (1/9)" and the R35's frame
     0x1DB2, 0x11ED,
+    # the other pages' top bars (2/9..9/9); story page: its frame, "?" and lamps, the episode's digits
+    *range(0x1DB3, 0x1DBB), 0x1A55, 0x1A51, 0x1C16, 0x1800, *range(0x1204, 0x120E),
+    *_story_faces(),
+    # the crowns; the 10-in-a-row's medals and level digits; the time attack's course names
+    *range(0x11FC, 0x1204), 0xEDA, 0x1586, 0x1587, 0xED9, *range(0x8AB, 0x8B5),
+    0xEDB, 0xEDC, 0xEDD, 0xEDE, 0x11F4, 0xEE0, 0x11F5, 0xEE2, 0xEE8, 0xEE3, 0x11F6, 0xEE5, 0xEE6, 0xEE7, 0xEE9,
+    # the settings: gearbox and volume (menu_p_card_8_volume_*), the meter's and sound source's are packed already
+    0x1C2F, 0x8B6, 0x8B8, 0x11FB, *range(0x180E, 0x1812),
     *range(3352, 3362),  # menu_p_ranking_time0..9: rank, time and horsepower digits (0x93f1ec0)
     4062,                # menu_p_ranking_waku_1: the ranking plate
     2718,                # menu_p_car_bariki_b: handling grade B (GetHandling of an untuned car)
@@ -724,7 +763,11 @@ CARD_HAVE_YES, CARD_HAVE_NO = CARD_TEXT_BASE + len(CARD_TEXTS), CARD_TEXT_BASE +
 CARD_HAVE = [(0x1720, 169, 190, "SAVED CARS"), (0x13C5, 145, 172, "NEW CAR"),
              (0x1720, 169, 190, "SAVE IT"), (0x13C5, 145, 172, "DON'T SAVE")]
 CARD_GLYPH2, CARD_GLYPHS2 = 105020, "0123456789-,"
-CARD_GLYPH5, CARD_GLYPHS5 = 105040, "0123456789-"
+CARD_GLYPH5, CARD_GLYPHS5 = 105040, "0123456789-'\""
+# The card's other pages' words in font 5 (clSeqCardDisp3::run and 6::run's formats, the English
+# main's " races ", " wins", " coin(s)", " Races", " Outruns"), as CARD_PAGE_TEXT_BASE + k
+CARD_PAGE_TEXT_BASE = 105600
+CARD_PAGE_TEXTS = ["ノーマル", "LV.", "戦 ", "勝 ", "枚 ", "戦　", "撃墜"]
 CARD_CAR_BASE, CARD_COLOR_BASE = 105100, 105200
 # The card's title row (clSeqCardDisp1::run 0x87de991: the class's string, "級", a full-width space, "/", the title)
 # for each class 0..46 (GetClassStr's table at 0x9332980), the title the port's one, as
@@ -1035,6 +1078,9 @@ def main():
         for k, c in enumerate(glyphs):
             sprites.append(render_text(elf, names, root, font, c))
             ids.append(base + k)
+    for k, text in enumerate(CARD_PAGE_TEXTS):
+        sprites.append(render_text(elf, names, root, 5, text))
+        ids.append(CARD_PAGE_TEXT_BASE + k)
     for k, name in enumerate(CLASS_NAMES):
         sprites.append(render_text(elf, names, root, 5, name + "級" + chr(0x3000) + "/湾岸の新人"))
         ids.append(CARD_CLASS_BASE + k)

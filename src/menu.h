@@ -100,8 +100,7 @@ typedef struct {
    * story race lost this loop: hasStoryLose +0x187); the ones due (the same bits 1, 2, 4), the
    * one up and its frame */
   unsigned char st_bonus_car[MENU_GARAGE_MAKERS][MENU_GARAGE_CARS];
-  /* The card's settings (MENU_CARDSET, the card check's cardcheck_7 and _8, from the car
-   * setting): its meter (clV386CardData +0x26c: 0 Normal, 1 For Racing, 2 SPECIAL, which the
+  /* The card's settings (the card check's cardcheck_7 and _8, its last two pages): its meter (clV386CardData +0x26c: 0 Normal, 1 For Racing, 2 SPECIAL, which the
    * second undefeated bonus unlocks) and BGM sound source (0 3/3DX/3DX+, 1 Maximum Tune & 2:
    * the clear bonus, 2 Wangan Midnight R: the undefeated bonus), per car */
   signed char meter_car[MENU_GARAGE_MAKERS][MENU_GARAGE_CARS], sound_car[MENU_GARAGE_MAKERS][MENU_GARAGE_CARS];
@@ -241,11 +240,17 @@ typedef struct {
    * st_bits and ten_result are its, kept per car in st_div_car, st_bits_car and ten_car
    * (menu_own_store puts them back, menu_own_load takes a car's). HAVE (the arcade's "do
    * you have a card?", clSeqCardHaveSelectThread) offers the save's cars (GARAGE, the port's
-   * look at them, then CARD, the card's first page, clSeqCardDisp1) or a new car (MAKER ...
+   * look at them, then CARD, the card's nine pages, clSeqCardDisp1..9) or a new car (MAKER ...
    * COLOR, then CARD for the car registered); have_sel the card at rest (0 YES, 1 NO),
    * own_view the car GARAGE shows, card_back the screen CARD goes back to. */
   menu_own own[MENU_OWN_MAX];
   int n_own, own_sel, own_view, have_sel, card_back;
+  int card_page; /* CARD's page, 0..8 (clSeqCardDisp1..9) */
+  int card_skip; /* its continue key pressed: on to the car setting */
+  /* its time attack page's list: where it has scrolled to (px, 0..744), scrolling by itself, the
+   * UP or DOWN key held (-1, +1), a controller's d-pad or stick (-1..1, the app's) */
+  float card_scroll, card_stick;
+  int card_auto, card_hold;
   /* The player's name (the card's five characters, namedb.h's, -1 past its end), asked for
    * by NAME (clSeqCardNameSelectThread) as soon as a NEW GAME starts: the grid's page
    * (0 katakana .. 3 small letters), the key last tapped (its place, -1 none) and the frames
@@ -459,7 +464,7 @@ enum { MENU_MOVIE, MENU_TITLE, MENU_RANKING, MENU_LOGO, MENU_PROLOGUE, MENU_STAR
        MENU_ST_LEVEL, MENU_ST_RIVAL, MENU_PRE, MENU_ST_TUNE, MENU_TEN_COURSE, MENU_TEN_LEVEL,
        MENU_TG_GET, MENU_TG_AERO, MENU_TG_PART, MENU_TG_WEAR, MENU_OPTION, MENU_SAVE, MENU_HAVE, MENU_GARAGE,
        MENU_CARD, MENU_LVUP, MENU_ST_EFF, MENU_TG_WHEEL, MENU_TG_SELECT, MENU_TG_MAKER, MENU_NAME,
-       MENU_TG_VINYL, MENU_VS, MENU_VS_SEL, MENU_VS_AREA, MENU_VS_MATCH, MENU_SHOGO, MENU_VS_STAR, MENU_INFO, MENU_LAYOUT, MENU_POEM, MENU_BONUS, MENU_CARDSET, MENU_PAD, MENU_PAD_TEST };
+       MENU_TG_VINYL, MENU_VS, MENU_VS_SEL, MENU_VS_AREA, MENU_VS_MATCH, MENU_SHOGO, MENU_VS_STAR, MENU_INFO, MENU_LAYOUT, MENU_POEM, MENU_BONUS, MENU_PAD, MENU_PAD_TEST };
 enum { MENU_GAME_STORY, MENU_GAME_TEN, MENU_GAME_TA, MENU_GAME_VS };
 
 /* The cars the car select shows in 3D this frame (the carousel, or the colour turntable),

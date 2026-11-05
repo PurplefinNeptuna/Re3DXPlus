@@ -703,6 +703,13 @@ static void records_save(void) {
   fclose(f);
 }
 
+/* this car type's best on a course, 0 none (the card's time attack page) */
+int app_card_best(int course, int pack) {
+  for (int k = 0; k < G.n_car_best; ++k)
+    if (G.car_best[k].course == course && G.car_best[k].pack == pack) return G.car_best[k].ms;
+  return 0;
+}
+
 static void records_show(int course) {
   float best = (float)G.best_ms[course] * 0.001f;
   hud_set_records(best, best);
@@ -1543,12 +1550,20 @@ static void pad_menu(float dt, int down, int step, float lx, float ly, float rx,
     return;
   }
   int free_screen = menu_pad_free(m);
+  /* the card's time attack page: up and down scroll its list, either stick and no cursor */
+  if (m->screen == MENU_CARD && m->card_page == 6) {
+    float d = (float)m->pad_stick_dead * 0.01f, e = (float)m->pad_stick_end * 0.01f, v = pad_range(ly, d, e) + pad_range(ry, d, e);
+    int hat = (pad.held & PAD_DOWN ? 1 : 0) - (pad.held & PAD_UP ? 1 : 0);
+    m->card_stick = hat ? (float)hat : fmaxf(-1.0f, fminf(1.0f, v));
+    rx = ry = 0.0f;
+  }
   float dead = (float)m->pad_stick_dead * 0.01f, end = (float)m->pad_stick_end * 0.01f;
   if (m->screen != pad.screen) {
     pad.screen = m->screen;
     pad.shown = free_screen;
     pad.x = 512.0f, pad.y = 384.0f;
   }
+  if (free_screen) pad.shown = 1; /* (the card's settings pages are free inside one screen) */
   float mx = pad_range(rx, dead, end) + (free_screen ? pad_range(lx, dead, end) : 0.0f);
   float my = pad_range(ry, dead, end) + (free_screen ? pad_range(ly, dead, end) : 0.0f);
   if (mx != 0.0f || my != 0.0f) {

@@ -19,7 +19,7 @@ void app_touch(void *id, int phase, float x, float y);
  * 1 one connected, 2 one with motors; one connected hides the on-screen keys. The PAD_* held, the sticks (-1..1, + right and
  * down) and the triggers (0..1). */
 enum { PAD_A = 1, PAD_B = 2, PAD_X = 4, PAD_Y = 8, PAD_LB = 16, PAD_RB = 32, PAD_LT = 64, PAD_RT = 128,
-       PAD_START = 256, PAD_SELECT = 512, PAD_LEFT = 1024, PAD_RIGHT = 2048 };
+       PAD_START = 256, PAD_SELECT = 512, PAD_LEFT = 1024, PAD_RIGHT = 2048, PAD_UP = 4096, PAD_DOWN = 8192 };
 void app_pad(float dt, int on, int buttons, float lx, float ly, float rx, float ry, float lt, float rt);
 /* for the controller test: n (to MENU_PAD_AXES) axes as the device reports them, each its Android
  * AXIS_* number and three floats: value, min, max */

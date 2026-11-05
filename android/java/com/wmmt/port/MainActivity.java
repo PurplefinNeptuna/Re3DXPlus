@@ -181,6 +181,8 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback, Se
     case KeyEvent.KEYCODE_BUTTON_SELECT: return 512;
     case KeyEvent.KEYCODE_DPAD_LEFT: return 1024;
     case KeyEvent.KEYCODE_DPAD_RIGHT: return 2048;
+    case KeyEvent.KEYCODE_DPAD_UP: return 4096;
+    case KeyEvent.KEYCODE_DPAD_DOWN: return 8192;
     default: return 0;
     }
   }
@@ -190,6 +192,9 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback, Se
     if (bit == 0 || !isPad(e.getDevice())) return super.dispatchKeyEvent(e);
     /* Generic.kcm turns keys nothing took into others: the stick buttons (THUMBL, THUMBR) into DPAD_CENTER, our A */
     if ((e.getFlags() & KeyEvent.FLAG_FALLBACK) != 0) return true;
+    /* a pad with analog triggers: PlayStation pads also press L2 and R2 at the trigger's first touch, which read as full */
+    if (bit == 64 && (e.getDevice().getMotionRange(MotionEvent.AXIS_LTRIGGER) != null || e.getDevice().getMotionRange(MotionEvent.AXIS_BRAKE) != null)) return true;
+    if (bit == 128 && (e.getDevice().getMotionRange(MotionEvent.AXIS_RTRIGGER) != null || e.getDevice().getMotionRange(MotionEvent.AXIS_GAS) != null)) return true;
     if (e.getAction() == KeyEvent.ACTION_DOWN) padKeys |= bit;
     else if (e.getAction() == KeyEvent.ACTION_UP) padKeys &= ~bit;
     padSend();
@@ -207,7 +212,8 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback, Se
     padLt = Math.max(e.getAxisValue(MotionEvent.AXIS_LTRIGGER), e.getAxisValue(MotionEvent.AXIS_BRAKE));
     padRt = Math.max(e.getAxisValue(MotionEvent.AXIS_RTRIGGER), e.getAxisValue(MotionEvent.AXIS_GAS));
     float hat = e.getAxisValue(MotionEvent.AXIS_HAT_X);
-    padHat = hat < -0.5f ? 1024 : hat > 0.5f ? 2048 : 0;
+    float hatY = e.getAxisValue(MotionEvent.AXIS_HAT_Y);
+    padHat = (hat < -0.5f ? 1024 : hat > 0.5f ? 2048 : 0) | (hatY < -0.5f ? 4096 : hatY > 0.5f ? 8192 : 0);
     padSend();
     int n = 0;
     for (InputDevice.MotionRange r : e.getDevice().getMotionRanges()) {
